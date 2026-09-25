@@ -1,0 +1,6 @@
+# OPTIONAL GPU extra for the ber_hackathon env (not needed by the Submission-1 baseline,
+# not part of the submission package). CUDA 13.0 build; needs an NVIDIA driver that supports
+# CUDA 13 (verified on this machine: driver 616.92, RTX 3060 Laptop).
+#   python -m pip install --no-cache-dir -r requirements-gpu.txt
+--index-url https://download.pytorch.org/whl/cu130
+torch==2.14.0

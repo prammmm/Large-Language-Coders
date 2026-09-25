@@ -63,7 +63,7 @@ hypothesis, local validation result, expected benefit, and why it's worth a slot
 Anything that can be measured locally is measured locally.
 
 ### RULE 10 — SOURCE OF TRUTH
-The official challenge documentation (`Problem Statement.docx`, and `student_resource/` if it becomes available)
+The official challenge documentation (`Problem Statement.docx`, `student_resource/README.md`, `student_resource/utils/validate_submission.py`, `student_resource/Documentation_template.md`)
 is the source of truth for requirements, constraints, output format, evaluation, eligibility, allowed models,
 licenses and fair play. If a general ML assumption conflicts with it, follow the documentation.
 If something isn't covered, say "Not specified in the provided materials." Don't invent requirements.
@@ -89,11 +89,23 @@ If something isn't covered, say "Not specified in the provided materials." Don't
     It must regenerate both output files from the data using only that folder.
 14. Metric: **macro-averaged per-S1-entity F0.5**. Singletons score 1.0 for an empty prediction and 0.0 for any prediction.
 15. Final ranking = **private leaderboard** (held-out part of test). Don't overfit the public leaderboard.
+16. Output TSVs: **UTF-8 without BOM** (a BOM fails the official header check, verified) and **LF** line endings
+    (on Windows pandas defaults to CRLF → always pass `lineterminator="\n"`; never write outputs with PowerShell `Out-File`).
+17. Before any upload: `python student_resource/utils/validate_submission.py -m output/matching_results.tsv -c output/candidate_pairs.tsv -t datasets/test`
+    must print PASS (note `-t datasets/test`; the script's default path is wrong for this repo). Treat unknown IDs and matches ⊄ candidates as errors,
+    even though the official script only warns or skips them.
 
 ## Environment facts (verified 2026-09-25)
 - Windows 11, Python 3.13.9, 16 logical CPUs, **16 GB RAM (often only ~2–3 GB free)**, RTX 3060 Laptop 6 GB.
-- Installed: pandas 2.3.3, numpy 2.2.4, pyarrow 21, scikit-learn 1.7.2, jellyfish, torch 2.13.
-  NOT installed yet: rapidfuzz, lightgbm, polars, duckdb (adding them is a decision to record).
+- Project env: **conda `ber_hackathon`** (`environment.yml`, Python 3.13.15): numpy 2.2.4, pandas 2.3.3, pyarrow 21.0.0,
+  rapidfuzz 3.14.6, PyYAML, pytest, psutil (DEC-012). Env python: `E:\hell\hell\envs\ber_hackathon\python.exe`.
+  Optional GPU extra installed: torch 2.14.0+cu130 (`requirements-gpu.txt`); CUDA verified on the RTX 3060 (driver 616.92).
+  The baseline does not use torch. NOT in the env: lightgbm, scikit-learn, polars, duckdb (adding them is a decision to record).
+  PowerShell needs a one-time `conda init powershell`; otherwise `conda activate` silently leaves base python active.
+  C: has little free space (~5 GB): use `pip install --no-cache-dir` for big wheels.
+- Pipeline entry point: `python -m ber.pipeline.run_baseline <preprocess|split|train|infer|submit|all> --config configs/baseline_v0.yaml` (see README.md).
+  Dev loop on a 2% sample: `configs/sample_dev.yaml` (never writes to `output/`).
+- `conda run` fails on multi-line `-c` scripts; call the env python directly. Multiprocessing (spawn) cannot run code piped via stdin.
 - Data is large (train: 2.2M S1 / 5.0M S2 / 5.3M S3; test: 1.73M S1 / 4.9M S2 / 5.1M S3).
   **Memory is a first-class constraint**: prefer pyarrow/columnar ops, process per country/shard,
   avoid full pandas object-dtype copies of S2/S3.

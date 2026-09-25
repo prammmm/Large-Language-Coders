@@ -186,6 +186,120 @@ Status: Proposed
 
 ---
 
+## DEC-011 — Submission gate = official validator + stricter local checks; fixed output encoding
+
+Date: 2026-09-25
+
+Context: `student_resource/` arrived. The official validator is lenient in three places. ID existence is off by default, matches ⊄ candidates only produces a warning, and CRLF is tolerated.
+The README says unknown IDs are rejected, while the validator says they only lower the score. A UTF-8 BOM fails the header check (verified by smoke test). On Windows, pandas writes CRLF by default (verified).
+
+Options considered:
+- Option A: Rely on the official validator only.
+- Option B: Write our own validator from scratch.
+- Option C: Run the official validator unmodified, **plus** a thin wrapper adding stricter checks: memory-light ID existence as an error, matches ⊆ candidates as an error, no BOM, LF only, no whitespace in fields.
+
+Decision: **Option C.** A single shared writer emits UTF-8 (no BOM) with `lineterminator="\n"`, no quoting, and exactly one row per test S1.
+
+Reason: The organizer's own checks are the authority. The extra checks cover the ambiguous and lenient cases conservatively, at almost no cost.
+
+Trade-offs: Two tools must both pass. The ID-existence check must be implemented memory-efficiently (~10M IDs).
+
+Validation plan: A trivial all-empty test file (LF, no BOM) already passes the official validator (smoke test, 2026-09-25). The wrapper gets unit tests on crafted bad files (BOM, CRLF, duplicate row, duplicate ID, S1 self-match, unknown ID, match ∉ candidates).
+
+Status: Proposed
+
+---
+
+## DEC-013 — Learned matcher: numpy logistic regression, trained on train-fold S1, threshold from an inner train-fold split
+
+Date: 2026-09-25
+
+Context: The weighted rule (DEC-006 Baseline 1) left 0.125 F0.5 between the realised score and the oracle. EXP-D-01 and EXP-M-02 measured about +0.031 from fitting the weights. scikit-learn and LightGBM are not in the env.
+
+Options considered:
+- Option A: Keep the rule.
+- Option B: scikit-learn LogisticRegression (new dependency).
+- Option C: A small Newton-IRLS logistic regression in numpy (no dependency, deterministic, unit-tested).
+- Option D: LightGBM now.
+
+Decision: **Option C.**
+- The model is fitted on a seeded sample of **train-fold** S1s; validation S1s are excluded by construction and checked.
+- The threshold is tuned on an inner 20% of those train-fold S1s (`decision.threshold_from: model`).
+- The model is stored as readable JSON (`experiments/runs/<ID>/model.json`).
+
+Reason:
+- The measured gain holds on both validation halves.
+- The train-fold threshold equalled the validation optimum in every run.
+- No dependency or license risk.
+
+Trade-offs: Linear in its inputs (interactions must be listed explicitly). LightGBM stays a separate, evidence-gated experiment.
+
+Status: Proposed (evidence: EXP-M-02, EXP-M-02b, EXP-F-01a/b)
+
+---
+
+## DEC-014 — Blocking v1 = sorted name_core key + leading-zero-safe address numbers (only with a learned matcher)
+
+Date: 2026-09-25
+
+Context: The EXP-B-02 sweep changed one thing at a time on the frozen validation split.
+
+Decision:
+- Enable `sorted_core` (recall@20 +0.050 for +4.3% candidates) and `strip_leading_zeros` (+0.016 for +0.4%). Together: 0.7983 → 0.8597.
+- **Reject:** addr_num_word cap increases (+0.005 to +0.008 recall for +200k to +297k candidates), max_nums 3 and max_words 6 (lower recall@20), and the exact_core key (subsumed by sorted_core).
+- The name_token pass (+0.9 points on top of bc but +321k candidates, 2% of them true) stays off.
+- Caps remain global (no country-specific values: open-set rule).
+
+Constraint: With the hand-weighted rule, Blocking v1 **lowers** precision (0.9226 → 0.8879; EXP-B-02), so it is only adopted together with DEC-013.
+
+Status: Proposed
+
+---
+
+## DEC-015 — Conflict features: number conflict and legal-form conflict
+
+Date: 2026-09-25
+
+Decision:
+- Add `num_conflict` (both addresses have numbers, none shared) and `legal_form_conflict` (canonical legal forms present on both sides and disjoint).
+- Number comparisons use leading-zero stripping (`features.strip_leading_zeros`).
+- The legal-form list is the existing generic list in `normalization/views.py` with 3 synonym merges (limited→ltd, incorporated→inc, corporation→corp). No new external resource.
+
+Evidence:
+- F0.5 +0.0087 then +0.0084.
+- Precision +0.0040 then +0.0038.
+- False merges −2,901 in total.
+
+Status: Proposed
+
+---
+
+## DEC-012 — One conda env `ber_hackathon`; add rapidfuzz, PyYAML, psutil; Arrow system allocator
+
+Date: 2026-09-25
+
+Context: The Phase-1 brief asked for a single reproducible environment. Report §10 flagged `rapidfuzz` as needing approval.
+On this machine, Arrow's default (mimalloc) pool kept freed memory. In one run this led to an access-violation crash near the Windows commit limit.
+
+Decision:
+- `environment.yml` (conda-forge, Python 3.13) plus pinned `requirements.txt`.
+- Packages: numpy 2.2.4, pandas 2.3.3, pyarrow 21.0.0, **rapidfuzz 3.14.6 (MIT)**, PyYAML 6.0.3, pytest 8.4.2, psutil 7.2.2. The `ber` package is installed editable.
+- No torch, LightGBM or scikit-learn is needed for Submission 1.
+- Every entry point calls `configure_arrow()`, which switches Arrow to the system allocator.
+
+Reason: rapidfuzz gives vectorised, multithreaded string similarity (`process.cpdist`), measured at about 60k pairs/s for the full feature set.
+The system allocator cut the CSV-streaming peak from 0.99 GB to 0.61 GB (measured) and returns memory to the OS.
+
+Trade-offs: The system allocator is slightly slower (+0.5 s per 500 MB file).
+
+Addendum (2026-09-25, at the user's request): **optional GPU extra.** `torch 2.14.0+cu130` was installed into the same env via `requirements-gpu.txt`.
+CUDA is verified on the RTX 3060 Laptop (driver 616.92) with a GPU matmul. The Submission-1 code does not use torch.
+Any future GPU model must still be MIT/Apache-2.0 and ≤8B parameters, and only the models actually used go into the submission `requirements.txt`.
+
+Status: Proposed (already applied in the Phase-1 code; reversible via config/code)
+
+---
+
 ## DEC-010 — Memory-aware data engineering (pyarrow/Parquet, per-country shards, float32 features)
 
 Date: 2026-09-25

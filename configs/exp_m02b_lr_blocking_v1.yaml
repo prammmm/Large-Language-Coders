@@ -1,0 +1,21 @@
+# EXP-M-02b: Blocking v1 (EXP-B-02) + learned matcher (EXP-M-02). Combined candidate.
+# `fit` re-blocks train-fold S1s with Blocking v1; `evaluate` re-scores the EXP-B-02
+# validation parts (identical candidates to EXP-B-02, so matcher vs blocking effects separate).
+inherit: exp_b02_blocking_v1.yaml
+
+experiment:
+  id: EXP-M-02b
+
+scoring:
+  tag: scored_EXP-M-02b
+  eval_source_tag: scored_EXP-B-02
+
+matcher:
+  type: logistic
+
+decision:
+  threshold_from: model
+  threshold: 0.5
+
+fit:
+  max_train_s1: 200000

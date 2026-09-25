@@ -27,7 +27,7 @@
 - **Recommended architecture.** A country-partitioned, multi-pass, **recall-first blocking** stage (name tokens, address number+word keys, a character n-gram pass and a transliterated-name pass, unioned and then capped by a cheap score).
   Then a **country-agnostic pairwise similarity model** (rules → logistic regression → LightGBM), then an **entity-level decision layer tuned directly for F0.5**, which also uses S2/S3 exclusivity.
 - **The biggest levers**, as hypotheses: blocking recall with a controlled candidate count, handling Indic transliteration, the precision-oriented entity-level decision rule, and robustness on France.
-- **Missing organizer files:** `student_resource/utils/validate_submission.py` and `Documentation_template.md` are referenced but **not in the repo**. We need to obtain them.
+- **Organizer files (update 2026-09-25):** `student_resource/` has now arrived (README, `utils/validate_submission.py`, `Documentation_template.md`). It is reviewed in §4.1. The official validator passes a trivial all-empty test file, and it rejects files that start with a UTF-8 BOM.
 
 ---
 
@@ -218,7 +218,7 @@ Per source: up to 5 S2 and up to 6 S3 matches per S1.
 | Only S2/S3 IDs that exist in the test set; no S1 self-matches | PS | |
 | Matches ⊆ candidates | PS | validator warns |
 | `candidate_pairs` = exact final model-inference set | PS | |
-| Official validator `utils/validate_submission.py` (stdlib) | PS | **Not present in repo** |
+| Official validator `utils/validate_submission.py` (stdlib) | PS / student_resource | Present in `student_resource/utils/`. See §4.1 |
 | Model license MIT/Apache-2.0, ≤8B parameters | PS Constraints | Library license policy: *Not specified in the provided materials* |
 | No external lookup / augmentation | PS Fair Play | disqualification |
 | Country is an open set; France only in test | PS Data Description | no hard-coding, filtering or one-hot |
@@ -228,6 +228,23 @@ Per source: up to 5 S2 and up to 6 S3 matches per S1.
 | Runtime / hardware limits for reproduction | — | *Not specified in the provided materials* |
 | Deadline / timeline | — | *Not specified in the provided materials* |
 | Whether unlabeled **test** data may be used for unsupervised statistics (IDF, vocab) | — | *Not specified.* It's unavoidable for blocking the test set. See Questions. |
+
+### 4.1 Official student resources (reviewed 2026-09-25)
+
+`student_resource/README.md` has the same content as `Problem Statement.docx`, so no requirements change.
+The validator and the template add these practical facts:
+
+| Finding | Evidence | Consequence |
+|---|---|---|
+| The validator's default `--test-dir` is `dataset/test`, but our data is at `datasets/test`. | script defaults | Run it from the repo root: `python student_resource/utils/validate_submission.py -m output/matching_results.tsv -c output/candidate_pairs.tsv -t datasets/test` |
+| A UTF-8 **BOM** makes the header check fail (`'﻿source1_entity_id'`). | smoke test: an all-empty file written with `utf-8-sig` → FAIL | Write outputs as plain `utf-8`, never `utf-8-sig`, and never with PowerShell 5.1 `Out-File`/`Set-Content`. |
+| CRLF passes the validator, because Python text mode converts `\r\n`. The hidden scorer's parser is not documented. On Windows, pandas `to_csv` writes `\r\n` by default (verified). | smoke test + pandas check | Always pass `lineterminator="\n"`. It costs nothing and removes the risk. |
+| An all-empty `matching_results.tsv` with all 1,732,544 test S1 IDs (LF) → **PASS**. | smoke test | The writer and row set are proven. EXP-0-00's file shape is valid. |
+| The ID-existence check is **off by default** (`--check-ids` loads all ~10M S2/S3 IDs and needs a few GB of RAM). | script docstring | Our own gate must check ID existence memory-efficiently, e.g. with sorted arrays or hashes rather than Python string sets. |
+| The docs conflict on unknown IDs. The README/PS Constraint 2 says they "will be rejected", while the validator says they "only lower your score". | README vs script | Treat an unknown ID as a **hard error** (the conservative reading). |
+| matches ⊄ candidates is only a *warning* in the validator. | script | Our gate makes it an **error**. It indicates a pipeline bug, and the final package is audited. |
+| The validator does not strip whitespace from S1 IDs and splits lists on `,` only. | script | No spaces anywhere. Writer unit tests must cover this. |
+| `Documentation_template.md` sections: Executive Summary; Methodology (problem analysis, approach type, core innovation); Blocking (keys, **total candidate pairs**, how true matches were kept); Matching model (features, model type, threshold method); Results (**validation macro F0.5**, common FPs/FNs); Conclusion; Appendix (code structure, entry points). | template | Every experiment run must record total candidate pairs, blocking recall and the error-bucket summary, so the doc can be filled from the logs. |
 
 ## HARD CONSTRAINTS — NEVER VIOLATE
 
@@ -240,7 +257,8 @@ Per source: up to 5 S2 and up to 6 S3 matches per S1.
 7. Any model: **MIT/Apache-2.0, ≤8B params**.
 8. Reproducible end-to-end from `code/business_entity_resolution/` alone, with pinned `requirements.txt`.
 9. Raw data is read-only.
-10. Validate every output locally before spending a leaderboard slot.
+10. Validate every output locally before spending a leaderboard slot: run the official `student_resource/utils/validate_submission.py` **and** our stricter gate (§4.1).
+11. Write output TSVs as UTF-8 **without BOM**, with **LF** line endings.
 
 ---
 
@@ -706,7 +724,8 @@ Changes from the suggested layout: `datasets/` is kept in place instead of being
 | **Threshold overfit / public-LB overfit** | Medium | private LB drop | val-A/B, few LB decisions, choose on local |
 | **Transliteration** of Indic names | High (India = 47% of test) | recall/precision in India | learned token dictionary + char fallback; address-driven evidence |
 | **Exclusivity assumption false on test** | Low–Med | precision | adopt only if validated; LB A/B |
-| **Missing official validator/template** | Certain (now) | rejected submission / doc gaps | obtain files; our own validator mirrors the rules |
+| ~~Missing official validator/template~~ | Resolved 2026-09-25 | — | files received (§4.1) |
+| **Encoding/EOL surprises on Windows** (BOM, CRLF) | Medium | rejected submission | UTF-8 no BOM + LF in the writer; writer unit tests; official validator before every upload |
 | **License non-compliance** (models / libraries) | Low | disqualification | license register in the methodology doc; MIT/Apache models only |
 | **Non-reproducible final run** | Medium | disqualification in review | seeds, configs, pinned deps, clean rerun in Phase 15 |
 | **Time** (deadline unknown) | — | — | MUST-HAVE path first (§31) |
@@ -745,7 +764,7 @@ Changes from the suggested layout: `datasets/` is kept in place instead of being
 ## 26. Immediate Next Steps
 
 1. The team reviews this report and accepts or rejects DEC-001…DEC-010.
-2. Get `student_resource/` (validator + `Documentation_template.md`) from the portal.
+2. ~~Get `student_resource/`~~ Done: received and reviewed (§4.1).
 3. Approve the dependency additions (`rapidfuzz`, `lightgbm`, possibly `polars`/`duckdb`) and pin them.
 4. Start the parallel MUST-HAVE tracks (below).
 
@@ -796,7 +815,7 @@ See §25.
 
 ```text
 0. ALL (15 min)  → Read §1, §3, §5, HARD CONSTRAINTS. Accept/reject DEC-001..010 in DECISION_LOG.
-                   Someone downloads student_resource/ (validator + Documentation_template.md) from the portal.
+                   (student_resource/ is now in the repo, see §4.1.)
 
 1. Member A → Phase 1+3: src/ber/data/ingest.py (TSV→Parquet, row-count assertions, sep="\t", default quoting)
               then src/ber/normalization/ (Latin-only accent strip, Indic-safe, name/address views, unit tests
@@ -805,8 +824,10 @@ See §25.
               float32) with unit tests; agree the candidate schema with A:
               (s1_id, cand_id, country, pass_flags, cheap_score).
               Use an exact-core-name join as a toy candidate set until A's blocking lands.
-3. Member C → Phase 2: scripts/validate_submission_local.py (every rule in HARD CONSTRAINTS), TSV writer
-              (no quoting, empty lists, one row per S1), all-empty test submission that PASSES,
+3. Member C → Phase 2: scripts/validate_submission_local.py = run the OFFICIAL validator + stricter checks
+              (unknown IDs = error via memory-light ID check, matches ⊄ candidates = error, no BOM, LF),
+              TSV writer (utf-8 no BOM, lineterminator="\n", no quoting, empty lists, one row per S1),
+              all-empty test submission that PASSES both,
               experiment-runner skeleton writing experiments/runs/<ID>/metrics.json.
 4. Ayush    → Phase 2: src/ber/evaluation/metrics.py (official F0.5 + blocking recall + breakdowns) with tests
               (0.714 example, singleton cases); data/splits/ val fold (10% S1, stratified by country x
@@ -828,7 +849,7 @@ leaderboard submissions of untested pipelines (the all-empty file is validated L
 
 ## Questions / Uncertainties for the team
 
-1. **Organizer files missing:** where is `student_resource/` (the `utils/validate_submission.py` validator and `Documentation_template.md`)?
+1. ~~Organizer files missing~~ Resolved. New question: the README says unknown IDs "will be rejected", while the validator says they "only lower your score". We assume rejection (the conservative reading). Is organizer clarification worth asking for?
 2. **Deadline and daily schedule?** *Not specified in the provided materials.* It affects how much of SHOULD/NICE we attempt.
 3. **The 5 submissions/day limit** isn't in the problem statement. Please confirm the source (portal?).
 4. **Library licenses:** the PS restricts the *model* to MIT/Apache-2.0. Are BSD-licensed libraries (pandas, scikit-learn, numpy) acceptable for the pipeline? We assume yes, since they aren't "models", but it needs confirming.

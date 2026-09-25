@@ -1,0 +1,22 @@
+# Single Conda environment for the whole project (Submission-1 baseline).
+#   conda env create -f environment.yml
+#   conda activate ber_hackathon
+# Update after edits:  conda env update -f environment.yml --prune
+# Library licenses: numpy/pandas (BSD-3), pyarrow (Apache-2.0), rapidfuzz (MIT),
+# pyyaml (MIT), pytest (MIT). No ML model weights are used in Submission 1.
+name: ber_hackathon
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.13
+  - pip
+  - numpy=2.2.*
+  - pandas=2.3.3
+  - pyarrow=21.0.*
+  - rapidfuzz=3.14.*
+  - pyyaml=6.0.*
+  - pytest=8.4.*
+  - psutil
+  - pip:
+      - -e .            # installs the `ber` package from src/ (editable)

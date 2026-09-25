@@ -1,0 +1,18 @@
+# EXP-B-02: Blocking v1 with the EXP-B-01 matcher (weighted rule) -> isolates the blocking effect.
+# Changes vs EXP-B-01 (chosen from the measured blocking sweep, experiments/runs/EXP-B-02/blocking_sweep.md):
+#   (B) sorted name_core key         recall@20 +0.050 for +4.3% candidates
+#   (C) leading-zero address numbers recall@20 +0.016 for +0.4% candidates
+# Rejected by the sweep: cap increases (e100-e200), max_nums 3, max_words 6; name_token (d) kept OFF.
+inherit: baseline_v0.yaml
+
+experiment:
+  id: EXP-B-02
+
+blocking:
+  strip_leading_zeros: true
+  passes:
+    sorted_core:
+      enabled: true
+
+scoring:
+  tag: scored_EXP-B-02

@@ -22,6 +22,8 @@ student_resource/
 data/interim/
 data/processed/
 data/cache/
+# dev samples built from raw data (contain raw records)
+data/sample*/
 *.parquet
 *.feather
 *.arrow
@@ -89,3 +91,4 @@ Thumbs.db
 *.swp
 *.tmp
 *.log
+student_resource
