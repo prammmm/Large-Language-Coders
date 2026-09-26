@@ -36,6 +36,9 @@ from ber.config import Paths, load_config, parse_sets
 from ber.data.ingest import ingest_split
 from ber.data.normalize_records import country_key, load_manifest, normalize_split, read_country
 from ber.data.split import load_val_ids, make_split, match_counts
+from ber.decision.competition import best_claimant_keep, claim_stats
+from ber.normalization.crossscript import XlitMap
+from ber.pipeline.xlit import crossfit_plan, ensure_final_map, final_map_path, learn_map_for, xlit_enabled
 from ber.decision.threshold import apply_global_threshold, resolve_threshold, threshold_source
 from ber.evaluation.metrics import evaluate_arrays, threshold_sweep
 from ber.features.pair_features import FEATURE_NAMES, pair_features
@@ -54,12 +57,20 @@ class LazyPool:
     """Country pool (source2 rows, then source3 rows) whose columns are read from Parquet
     only when the blocker asks for them, so at most one string column is resident."""
 
-    def __init__(self, paths: Paths, split: str, key: str):
+    def __init__(self, paths: Paths, split: str, key: str, xmap=None):
         self.paths, self.split, self.key = paths, split, key
+        self.xmap = xmap  # EXP-N-02: learned cross-script map -> derived "name_xlit" column
+        self._xlit = None
         m = load_manifest(paths, split)
         self.num_rows = sum(m[s]["countries"].get(key, {}).get("rows", 0) for s in ("source2", "source3"))
 
     def column(self, col: str) -> pa.ChunkedArray:
+        if col == "name_xlit":
+            if self.xmap is None:
+                raise KeyError("name_xlit requested but no cross-script map was given")
+            if self._xlit is None:  # computed once per country, from name_core
+                self._xlit = pa.chunked_array([self.xmap.apply(self.column("name_core"))])
+            return self._xlit
         chunks = []
         for source in ("source2", "source3"):
             chunks += read_country(self.paths, self.split, source, self.key, [col]).column(col).chunks
@@ -194,21 +205,42 @@ def run_split(cfg: dict, paths: Paths, force: bool) -> None:
         make_split(paths, float(cfg["split"]["val_fraction"]), int(cfg["seed"]), force)
 
 
-def _country_setup(cfg, paths, split, key, subset_arr, n_s2):
+def with_xlit(s1: pa.Table, xmap) -> pa.Table:
+    """Add the learned cross-script view "name_xlit" (EXP-N-02) to an S1 table."""
+    return s1 if xmap is None else s1.append_column("name_xlit", xmap.apply(s1.column("name_core")))
+
+
+def resolve_xmap(cfg: dict, paths: Paths, xmap="auto"):
+    """``"auto"``: the final (fit-set-learned) map when xlit is enabled, else None."""
+    if isinstance(xmap, str) and xmap == "auto":
+        return ensure_final_map(cfg, paths) if xlit_enabled(cfg) else None
+    return xmap
+
+
+def _country_setup(cfg, paths, split, key, subset_arr, n_s2, xmap=None):
     s1 = read_country(paths, split, "source1", key, VIEW_COLS)
     if subset_arr is not None:
         s1 = s1.filter(pc.is_in(s1.column("entity_id"), value_set=subset_arr))
     if s1.num_rows == 0:
         return None
+    s1 = with_xlit(s1, xmap)
     ids = _read_pool(paths, split, key, ["row"])
     pool_row = ids.column("row").to_numpy().astype(np.int64)
     pool_row[ids.column("_src").to_numpy() == 3] += n_s2
     return s1, s1.column("row").to_numpy().astype(np.int64), pool_row
 
 
-def score_split(cfg: dict, paths: Paths, split: str, s1_subset, out_dir: Path, scorer, store_features: bool) -> dict:
-    """Blocking + features + scores for every S1 (or the subset), country by country."""
-    _clear_dir(out_dir)  # never mix parts from different runs
+def score_split(cfg: dict, paths: Paths, split: str, s1_subset, out_dir: Path, scorer, store_features: bool,
+                xmap="auto", clear: bool = True, part_prefix: str = "part") -> dict:
+    """Blocking + features + scores for every S1 (or the subset), country by country.
+
+    ``xmap``: EXP-N-02 cross-script map ("auto" = the final fit-set map when enabled; `fit` passes
+    out-of-fold maps). ``clear``/``part_prefix`` let `fit` write several cross-fit folds into one dir."""
+    xmap = resolve_xmap(cfg, paths, xmap)
+    if clear:
+        _clear_dir(out_dir)  # never mix parts from different runs
+    else:
+        out_dir.mkdir(parents=True, exist_ok=True)
     manifest = load_manifest(paths, split)
     n_s2 = int(manifest["source2"]["rows"])
     s1_countries = sorted(manifest["source1"]["countries"])
@@ -224,7 +256,7 @@ def score_split(cfg: dict, paths: Paths, split: str, s1_subset, out_dir: Path, s
 
     for key in s1_countries:
         with stage(f"score {split}/{key!r}"):
-            setup = _country_setup(cfg, paths, split, key, subset_arr, n_s2)
+            setup = _country_setup(cfg, paths, split, key, subset_arr, n_s2, xmap)
             if setup is None:
                 continue
             s1, s1_row, pool_row = setup
@@ -233,8 +265,9 @@ def score_split(cfg: dict, paths: Paths, split: str, s1_subset, out_dir: Path, s
                 LOG.warning("country %r has no S2/S3 records: all its S1 get empty lists", key)
                 stats["countries"][key] = cstats
                 continue
-            lazy_pool = LazyPool(paths, split, key)
+            lazy_pool = LazyPool(paths, split, key, xmap)
             blocker = CountryBlocker(s1, lazy_pool, cfg["blocking"])
+            gather_cols = FEATURE_COLS + (["name_xlit"] if xmap is not None else [])
             for lo, hi in blocker.chunk_bounds():
                 cand = blocker.candidates(lo, hi)
                 n = len(cand["s1_local"])
@@ -246,7 +279,7 @@ def score_split(cfg: dict, paths: Paths, split: str, s1_subset, out_dir: Path, s
                 # gather only this chunk's unique candidate rows, one pool column at a time
                 uniq_rows, cand_pos = np.unique(cand["pool_local"], return_inverse=True)
                 take_idx = pa.array(uniq_rows)
-                gathered = pa.table({c: lazy_pool.column(c).take(take_idx) for c in FEATURE_COLS})
+                gathered = pa.table({c: lazy_pool.column(c).take(take_idx) for c in gather_cols})
                 del take_idx, uniq_rows
                 score = np.empty(n, np.float32)
                 feats_all = {f: np.empty(n, np.float32) for f in fcols} if store_features else None
@@ -270,7 +303,7 @@ def score_split(cfg: dict, paths: Paths, split: str, s1_subset, out_dir: Path, s
                 }
                 if feats_all is not None:
                     cols.update({f: pa.array(v) for f, v in feats_all.items()})
-                pq.write_table(pa.table(cols), out_dir / f"part-{part_no:05d}.parquet", compression="zstd")
+                pq.write_table(pa.table(cols), out_dir / f"{part_prefix}-{part_no:05d}.parquet", compression="zstd")
                 part_no += 1
                 del gathered, cand_pos, cols, cand, feats_all, score
             cstats["blocking"] = blocker.stats
@@ -279,7 +312,10 @@ def score_split(cfg: dict, paths: Paths, split: str, s1_subset, out_dir: Path, s
             del blocker, lazy_pool, s1
     stats["candidate_pairs"] = sum(c["candidate_pairs"] for c in stats["countries"].values())
     stats["evaluated_s1"] = sum(c["n_s1"] for c in stats["countries"].values())
-    write_json(out_dir.parent / f"{out_dir.name}_scoring_stats.json", stats)
+    if xmap is not None:
+        stats["xlit_map"] = {k: xmap.meta.get(k) for k in ("label", "learned_from_s1", "learned_from_digest", "mappings")}
+    if clear:
+        write_json(out_dir.parent / f"{out_dir.name}_scoring_stats.json", stats)
     return stats
 
 
@@ -309,6 +345,7 @@ def run_block_eval(cfg: dict, paths: Paths) -> dict:
     exp = cfg["experiment"]["id"]
     val_ids = eval_s1_subset(cfg, paths)
     subset_arr = pa.array(val_ids, pa.string())
+    xmap = resolve_xmap(cfg, paths)
     manifest = load_manifest(paths, "train")
     n_s2 = int(manifest["source2"]["rows"])
     rows, pools, ranks, flags, pass_stats = [], [], [], [], {}
@@ -316,11 +353,11 @@ def run_block_eval(cfg: dict, paths: Paths) -> dict:
     with PeakMemory() as pm:
         for key in sorted(manifest["source1"]["countries"]):
             with stage(f"block-eval {key!r}"):
-                setup = _country_setup(cfg, paths, "train", key, subset_arr, n_s2)
+                setup = _country_setup(cfg, paths, "train", key, subset_arr, n_s2, xmap)
                 if setup is None:
                     continue
                 s1, s1_row, pool_row = setup
-                b = CountryBlocker(s1, LazyPool(paths, "train", key), cfg["blocking"])
+                b = CountryBlocker(s1, LazyPool(paths, "train", key, xmap), cfg["blocking"])
                 pass_stats[key] = b.stats["passes"]
                 for lo, hi in b.chunk_bounds():
                     c = b.candidates(lo, hi)
@@ -413,8 +450,24 @@ def run_fit(cfg: dict, paths: Paths) -> dict:
     else:
         out_dir = scored_dir(cfg, paths, "train", "fit")
         rule = make_scorer(cfg, paths, kind="weighted_rule")  # placeholder score; features are what matter
-        with stage("fit: block + features on train-fold S1"):
-            sstats = score_split(cfg, paths, "train", fit_ids, out_dir, rule, store_features=True)
+        if xlit_enabled(cfg):
+            # EXP-N-02 cross-fitting: each fold is scored with a map that never saw its own pairs,
+            # and the inner-tune fold (0) never contributes to any map (see ber.pipeline.xlit)
+            _clear_dir(out_dir)
+            sstats = {"crossfit_folds": []}
+            for f, ids_f, learn_f in crossfit_plan(cfg, fit_ids):
+                if set(ids_f) & set(learn_f):
+                    raise RuntimeError(f"xlit cross-fit: fold {f} would learn from its own S1")
+                xm = learn_map_for(cfg, paths, learn_f, f"crossfit fold {f}")
+                with stage(f"fit: block + features on train-fold S1, fold {f}"):
+                    st = score_split(cfg, paths, "train", ids_f, out_dir, rule, True, xmap=xm, clear=False, part_prefix=f"fold{f}")
+                sstats["crossfit_folds"].append({"fold": f, "scored_s1": len(ids_f), "map_learned_from_s1": len(learn_f),
+                                                 "map_learned_from_digest": xm.meta["learned_from_digest"],
+                                                 "mappings": xm.meta["mappings"], "candidate_pairs": st["candidate_pairs"]})
+            ensure_final_map(cfg, paths)  # the map for validation / E / test scoring (fit set)
+        else:
+            with stage("fit: block + features on train-fold S1"):
+                sstats = score_split(cfg, paths, "train", fit_ids, out_dir, rule, store_features=True)
     need = sorted(set(sum([n.split("*") for n in names], [])))
     d = _read_parts(out_dir, ["s1_row", "pool_row"] + need)
 
@@ -467,6 +520,11 @@ def run_fit(cfg: dict, paths: Paths) -> dict:
         "config": cfg.get("_config_path"), "blocking": cfg["blocking"], "features_options": feature_options(cfg),
         "solver": solver, "training_parts": str(out_dir),
     })
+    if xlit_enabled(cfg):
+        fm = XlitMap.load(final_map_path(cfg, paths))
+        model.meta["xlit"] = {"params": fm.meta.get("params"), "final_map": str(final_map_path(cfg, paths)),
+                              "final_map_learned_from_digest": fm.meta["learned_from_digest"], "final_map_mappings": fm.meta["mappings"],
+                              "training_features": "cross-fitted out-of-fold maps (fold 0 = inner tune, excluded from all maps)"}
     model.save(model_path(cfg, paths))
     LOG.info("FIT %s [%s]: %d pairs (%d positive) | inner-tune threshold %.2f F0.5 %.4f P %.4f R %.4f | %.1fs",
              exp, kind, model.meta["n_train_pairs"], model.meta["positives"], best["threshold"], best["f05"],
@@ -607,15 +665,30 @@ def run_submit(cfg: dict, paths: Paths) -> dict:
     del key
     s1_row = sc["s1_row"][order].astype(np.int64)
     pool_row = sc["pool_row"][order]
-    match = apply_global_threshold(sc["score"][order], threshold)
+    score = sc["score"][order]
+    match = apply_global_threshold(score, threshold)
     del sc, order
+    comp = cfg["decision"].get("competition") or {}
+    comp_stats = None
+    if comp.get("enabled", False):  # EXP-D-01: best claimant per pool record, over ALL test S1
+        if comp.get("rule", "best_claimant") != "best_claimant":
+            raise ValueError(f"decision.competition.rule: unknown rule {comp.get('rule')!r}")
+        with stage("competition: best claimant per pool record"):
+            before = claim_stats(pool_row, s1_row, match)
+            match = best_claimant_keep(pool_row, s1_row, score, match, margin=float(comp.get("margin", 0.0)))
+            comp_stats = {"rule": "best_claimant", "margin": float(comp.get("margin", 0.0)), "before": before,
+                          "after": claim_stats(pool_row, s1_row, match)}
+        LOG.info("competition: removed %d predicted pairs (%d -> %d); conflicted records %d -> %d",
+                 before["predicted_pairs"] - comp_stats["after"]["predicted_pairs"], before["predicted_pairs"],
+                 comp_stats["after"]["predicted_pairs"], before["conflicted_records"], comp_stats["after"]["conflicted_records"])
+    del score
     out = paths.output
     with stage("write candidate_pairs.tsv"):
         c_stats = write_id_lists(out / "candidate_pairs.tsv", CANDIDATE_HEADER, s1_ids, s1_row, (pool_row, ids))
     with stage("write matching_results.tsv"):
         m_stats = write_id_lists(out / "matching_results.tsv", MATCHING_HEADER, s1_ids, s1_row[match], (pool_row[match], ids))
     summary = {"threshold": threshold, "threshold_source": source, "scored_dir": str(sdir), "candidate_file": c_stats,
-               "matching_file": m_stats}
+               "matching_file": m_stats, "competition": comp_stats}
     LOG.info("wrote outputs: %s", summary)
     if cfg["submit"].get("strict_validate", True):
         with stage("strict validation"):
@@ -652,6 +725,9 @@ def main(argv=None) -> int:
         overrides.setdefault("train", {})["max_val_s1"] = a.max_val_s1
     cfg = load_config(a.config, overrides)
     paths = Paths(cfg)
+    allowed = cfg["experiment"].get("allowed_stages")  # decision-only experiments re-use another run's artefacts
+    if allowed and a.stage not in allowed:
+        raise SystemExit(f"stage {a.stage!r} is not allowed for {cfg['experiment']['id']} (allowed: {allowed})")
     if a.stage in ("preprocess", "all"):
         run_preprocess(cfg, paths, a.force)
     if a.stage == "split" or (a.stage == "all" and not paths.val_ids.exists()):

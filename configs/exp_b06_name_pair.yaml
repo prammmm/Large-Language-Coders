@@ -1,0 +1,26 @@
+# EXP-B-06: name-token-pair key on top of EXP-B-07 (and therefore N-03 + D-01).
+# ONE change: the disabled name_token pass slot runs in `pair` mode -- key = unordered pair of the
+# record's 2 rarest name-view tokens present in the pool; block cap 50. Targets name-only records
+# (empty / useless addresses; US never-retrieved pairs: 80% share name tokens but no useful address
+# word). Country-agnostic. LightGBM retrained (DEC-017). Everything else identical to EXP-B-07.
+inherit: exp_b07_name_x_addr.yaml
+
+experiment:
+  id: EXP-B-06
+
+paths:
+  output_dir: experiments/runs/EXP-B-06/output   # never the production output/ folder
+
+blocking:
+  passes:
+    name_token:
+      enabled: true
+      pair: true
+      max_tokens: 2
+      name_max_df: 1000000000
+      max_block_size: 50
+      weight: 1.0
+
+scoring:
+  tag: scored_EXP-B-06
+  eval_source_tag: null

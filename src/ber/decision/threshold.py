@@ -2,7 +2,8 @@
 
 A candidate pair is a predicted match iff score >= threshold. Only scored candidates can
 pass, so matches are always a subset of candidates. No exclusivity, top-k, margin,
-source- or country-specific rules (measured ≤ +0.001 in the EXP-B-01 analysis).
+source- or country-specific rules here (measured ≤ +0.001 in the EXP-B-01 analysis). The optional
+full-competition rule (EXP-D-01) lives in `ber.decision.competition` and is applied by `submit`.
 
 Where the threshold comes from (``decision.threshold_from``):
     val_sweep  best entity-level F0.5 on the evaluated validation S1s (EXP-B-01 behaviour)

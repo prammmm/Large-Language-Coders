@@ -28,12 +28,121 @@ Every run writes `experiments/runs/<ID>/{config.yaml,metrics.json,notes.md}` (th
 | **EXP-M-03** | A non-linear tree scorer extracts the interaction headroom the MLP probe found | LR → LightGBM (same blocking, same 22 inputs, same train-fold/inner protocol); **dev fit 50k S1** | **0.9021** (3 seeds 0.9021–0.9022) | **0.9779** | 0.8080 | 0.8597 | 16.1 | pending | **Strong candidate**; France guard required on full test |
 | EXP-M-03 (full) | Same, full 200k train-fold fit | team full run | **0.9037** | **0.9790** | 0.8100 | 0.8597 | 16.1 | **0.889** (Submission 3) | Banked; see `reports/EXP-M-03_SUBMISSION_3_REPORT.md` |
 | EXP-B-03a | Name-token blocking recovers true pairs and the strong LightGBM keeps precision | enable `name_token` (max_df 200); scorer = fixed EXP-M-03 model | 0.9027 (−0.0010) | 0.9735 ↓ | 0.8165 | 0.8686 | 17.6 | **0.890** (team check) | **Rejected** (coupling via cheap_* inputs; recovery alone +0.002) |
-| **EXP-B-04** | Combined blocking keys + a model retrained on that blocker recover missed true pairs without losing precision | + `name_addr` + `addr_pair` passes; LightGBM refit on the new train-fold candidates (top-K 20) | **0.9274** | 0.9774 | **0.8579** | **0.9267** | 19.3 | pending (not submitted) | **Ready for human review** |
+| **EXP-B-04** | Combined blocking keys + a model retrained on that blocker recover missed true pairs without losing precision | + `name_addr` + `addr_pair` passes; LightGBM refit on the new train-fold candidates (top-K 20) | **0.9274** | 0.9774 | **0.8579** | **0.9267** | 19.3 | **≈0.91** (Submission 5) | Banked; forensic analysis in `experiments/runs/POST-0.91-FORENSIC/REPORT.md` |
+| **EXP-D-01** | Under full competition, keeping only the best claimant of each S2/S3 record removes more false merges than true matches | Decision layer only: best claimant per record after the threshold (margin 0); B-04 scores, model and threshold re-used; no retraining | **0.9313** (E, 2.0M out-of-sample S1s, all S1s compete; control 0.9273) | **0.9840** | 0.8562 | 0.9267 | 19.3 | pending | **Keep; ready for human review** |
+| EXP-B-05 | A wider address-word window (3 → 5) for name_addr / addr_pair recovers missed India pairs; model retrained; D-01 on top | `max_words` 3 → 5 (config only) + LightGBM refit (threshold 0.62) | 0.9324 (E, full competition + D-01; control 0.9313) | 0.9813 ↓ | 0.8636 | 0.9285 | 19.6 | — | **Rejected** (+0.0010, of which the blocker is ~+0.0005; P −0.0027) |
+| **EXP-N-02** | A cross-script name view learned only from train true pairs recovers and correctly scores India script-mismatch pairs | Train-learned token map → `name_xlit` view for the name keys + 2 similarity features; LightGBM refit (cross-fitted maps); D-01 on top | **0.9402** (E, full competition + D-01; control 0.9313) | **0.9864** | 0.8702 | 0.9328 | 19.3 | **0.928** (Submission 6) | **KEEP**: current best |
+| EXP-N-03 | Indic legal-form words (learned) dropped from the cross-script view make generic cross-script names exact | legal-form stage of the learned map + refit; D-01 | 0.9413 (E; control N-02 + D-01 0.9402) | 0.9859 | 0.8735 | 0.9348 | 19.3 | — | Below gate (+0.0010); kept only as the base for B-06/B-07 |
 | EXP-B-04-k30 | Same blocker, top-K 30 | K 20 → 30 (own refit) | 0.9289 (+0.0015) | 0.9770 | 0.8618 | 0.9339 | 27.8 | — | Not selected (+45% candidates for +0.0015) |
 | EXP-D-03 (probe) | More trees help | 3,000 rounds (dev 50k) | 0.9027 (+0.0006) | 0.9778 | 0.8091 | 0.8597 | 16.1 | — | Rejected (capacity not a lever) |
 | EXP-D-02 (probe) | A non-linear scorer beats LR on the same features/protocol | MLP 22→64→32→1 (diagnostic, torch) | 0.8870–0.8903 (3 seeds) | 0.968–0.973 | 0.788–0.791 | 0.8597 | 16.1 | — | Evidence for EXP-M-03 (not adopted) |
 
 ## Detailed entries
+
+### EXP-N-03 — Learned Indic legal-form words dropped from the cross-script view
+- **Hypothesis:** Unmapped Indic legal-form words ("private limited") keep cross-script names from matching the S1 core exactly (only 12% did).
+- **Change vs N-02:** a legal-form stage in the train-learned map. Tokens co-occurring with S1 legal forms in ≥ 20 distinct businesses at ≥ 0.8 confidence, and not explained by a content word, are dropped from `name_xlit`. LightGBM refit.
+- **Map:** 31 legal tokens in 9 scripts. Exact-core equality 12% → 95.5%; Jaccard 0.586 → 0.973 (validation, measurement only).
+- **Result (E, full competition + D-01):**
+  - F0.5 0.9402 → 0.9413 (+0.0010); halves +0.0007 to +0.0010;
+  - P −0.0005, R +0.0033;
+  - India +0.0023, US +0.0001;
+  - blocking recall@20 +0.0020.
+- **Diagnosis:** the 7,390 still-unreachable cross-script pairs have identical names but generic ones (the name block exceeds cap 50); the shared address word is the city. This leads to EXP-B-07.
+- **Decision:** Below the +0.003 gate, so no standalone submission. Kept as the base for B-06/B-07; the combined candidate is gated against N-02.
+- **Artefacts:** `experiments/runs/EXP-N-03/` (REPORT.md, comparison JSON, `output/` validated); `configs/exp_n03_legal_tokens.yaml`; `tests/test_xlit.py` (+4 tests).
+
+### EXP-N-02 — Train-pair-learned cross-script name view (transliteration)
+- **Hypothesis:** Script mismatch (Latin S1 vs Indic-script pool names) is India's largest remaining loss. A token correspondence learned from provided train true pairs bridges it for retrieval and scoring, without external resources.
+- **Change vs control (B-04 + D-01):**
+  - map learned by co-occurrence over distinct S1 entities (support ≥ 3, confidence ≥ 0.5, strict winner, ties rejected);
+  - `name_xlit` view (= `name_core` when nothing is mapped) used by the name-token blocking keys (`blocking.name_view`);
+  - 2 features (`xlit_core_jaccard`, `xlit_token_set`);
+  - LightGBM retrained from scratch.
+- **Leakage design:**
+  - final map from the 200k fit S1s only (validation raises);
+  - training rows use cross-fitted out-of-fold maps;
+  - fold 0 = the inner-tune split, which contributes to no map.
+- **Fair play:** provided train pairs only. No external dictionary, package, pretrained model or hard-coded script rule. No new dependency.
+- **Map:** 1,262 mappings (42 low support, 31 low confidence, 6 ambiguous rejected). Validation name Jaccard on cross-script pairs 0.021 → 0.586 (measurement only).
+- **Blocking (validation):**
+  - recall@20 0.9267 → 0.9328 (India 0.8816 → 0.8968, US identical); candidates unchanged;
+  - +5,150 true pairs enter top-20 / 508 pushed out; 518 lost to block-cap growth.
+- **Model:** inner-split threshold 0.67 (unchanged procedure); inner-tune F0.5 0.9384. Validation without competition 0.9376 (B-04 0.9274).
+- **Result (E = 2,006,821 out-of-sample S1s, all train S1s compete):**
+  - F0.5 0.9313 → **0.9402 (+0.0089)**; P 0.9840 → 0.9864; R 0.8562 → 0.8702;
+  - false merges −13%, singleton FP −15%;
+  - India 0.9025 → 0.9235, US 0.9506 → 0.9514;
+  - halves +0.0089 to +0.0091.
+- **Cross-script (E):**
+  - true cross-script pairs predicted 296,580 → 394,719;
+  - cross-script false merges 11,315 → 3,244.
+- **D-01** still helps (+0.0028); conflicts −33%.
+- **Test (unlabelled):** India predictions/S1 2.88 → 2.98; India conflicts 21,809 → 10,974; France and US unchanged. Output validated (official `--check-ids` PASS).
+- **Interpretation:** The largest single gain since LightGBM. It improves both recall and precision, because the model now sees name agreement for cross-script pairs instead of relying on address evidence alone.
+- **Decision:** **KEEP** (all 12 gate criteria pass). Ready for human review; not submitted.
+- **Artefacts:** `experiments/runs/EXP-N-02/` (REPORT.md, `xlit_map.json`, comparison JSONs, `output/`); `configs/exp_n02_transliteration.yaml`; `tests/test_xlit.py`; DEC-019.
+
+### EXP-B-05 — Wider address-word window (3 → 5) + retrained LightGBM, with D-01
+- **Hypothesis:** Many India never-retrieved pairs share address words outside the rarest-3 selection. A 5-word window recovers them without uncontrolled candidate growth.
+- **Change vs control (EXP-B-04 + D-01):**
+  - `addr_pair.max_words` and `name_addr.max_words` 3 → 5 (config only);
+  - LightGBM retrained on B-05 train-fold candidates (same 200k S1s, same parameters, inner-split threshold → 0.62).
+- **Expected effect:** Recall up, especially India; precision protected by D-01.
+- **Blocking (validation):**
+  - recall@20 0.9267 → 0.9285 (India 0.8816 → 0.8863, US 0.9568 → 0.9566);
+  - uncapped 0.9450 → 0.9488;
+  - candidates +1.9%.
+- **Pair fates:**
+  - 3,664 recovered, 761 lost (block cap 50 now drops keys the wider window made too common);
+  - top-20: 4,391 in / 3,024 out.
+- **Result (E = 2,006,821 out-of-sample S1s, all train S1s compete):**
+  - F0.5 0.9313 → 0.9324 (+0.0010); halves +0.0010 to +0.0012;
+  - P 0.9840 → 0.9813, R 0.8562 → 0.8636;
+  - false merges +18.8%, singleton FP +1,153;
+  - India +0.0021, US +0.0003.
+- **Attribution (diagnostic):** at a matched threshold the blocker effect is +0.0005. The rest comes from the lower retrained threshold, which lifts B-04 + D-01 equally.
+- **Interpretation:** The effect is real but small. Block-cap growth and top-K displacement cancel most of the recovery. Only 146 new-candidate false merges appear, so there is no new hard-negative pattern. Script mismatch remains 42% of India's unreachable pairs.
+- **Decision:** **Rejected** (not meaningful: +0.0010 < +0.003; precision −0.0027). B-04 + D-01 stays best.
+- **Next (proposed):** EXP-N-02, train-learned transliteration bridge. Needs the DEC-009 fair-play confirmation.
+- **Artefacts:** `experiments/runs/EXP-B-05/` (REPORT.md, sweep, forensics, comparison JSONs); `configs/exp_b05_addr_window5.yaml`; `tests/test_blocking_b05.py`.
+
+### EXP-D-01 — Full-competition best-claimant resolution (decision layer only)
+- **Hypothesis:** When several S1s predict the same S2/S3 record, keeping only the highest-scoring claimant removes more false merges than true matches, provided all S1s compete as on test.
+- **Basis:**
+  - [O] official: S1 is the *deduplicated* reference source.
+  - [M] train observation: every matched S2/S3 id belongs to exactly one S1.
+  - Per-record exclusivity is **not** an explicit challenge rule.
+- **Change vs EXP-B-04:** after the 0.67 threshold, group the predicted pairs by pool record over all S1s, keep the top score (tie → lowest S1 row) and drop the rest. Margin 0, nothing fitted.
+- **Unchanged:** candidates, 22 features, LightGBM model, threshold, blocker, normalization. Everything is re-used read-only; no retraining.
+- **Expected effect:** precision up, recall slightly down, F0.5 up ≈ +0.004 (forensic benchmark).
+- **Validation design:**
+  - all 2,206,821 train S1s scored with B-04 compete;
+  - evaluated on E = 2,006,821 non-fit S1s (the 200k fit S1s are competitors only);
+  - also the frozen validation fold, its halves, and E halves;
+  - control reproduces production validation to 9e-7.
+- **Actual result on E:**
+  - F0.5 0.9273 → **0.9313** (+0.0040);
+  - P 0.9775 → 0.9840;
+  - R 0.8576 → 0.8562;
+  - false merges 129,023 → 90,576;
+  - singleton FP 9,102 → 6,565;
+  - India 0.8965 → 0.9025, US 0.9479 → 0.9506.
+- **Stability:** validation halves +0.0040 / +0.0039; E halves +0.0040 / +0.0040.
+- **Sensitivity:**
+  - out-of-sample competitors only: +0.0037;
+  - margins 0.05 / 0.10 / 0.20 / 0.30 give 0.9301 / 0.9294 / 0.9284 / 0.9275 (monotonically worse; not tuned).
+- **Removed claims (E):** 47,098, of which 81.6% false.
+  - Singleton losers: 100% false.
+  - True removals concentrate in close contests (78% have margin < 0.05).
+- **Test (unlabelled diagnostics):**
+  - −49,954 predictions (France −2.62%, India −1.07%, US −0.15%);
+  - conflicted records 41,560 → 0;
+  - candidates byte-identical to B-04;
+  - strict and official (`--check-ids`) validators PASS.
+- **Interpretation:** the gain is real, test-like, stable, and comes almost entirely from precision. The validation-only fold hid it because about 90% of competitors were missing.
+- **Decision:** **Keep** (all criteria met). Ready for human review; not submitted.
+- **Artefacts:** `experiments/runs/EXP-D-01/` (REPORT.md, `full_competition_eval.json`, `output/`, `output_invariants.json`); `configs/exp_d01_best_claimant.yaml`; DEC-018.
 
 ### EXP-B-04 — Blocking V2 (combined keys) + LightGBM retrained on the same blocker
 - Hypothesis: Combined name/address and address/address keys recover the missed true pairs (78% of misses share such evidence), and a model retrained on that blocker keeps precision.
@@ -246,7 +355,7 @@ Every run writes `experiments/runs/<ID>/{config.yaml,metrics.json,notes.md}` (th
 - Decision: bc is kept **only in combination with a learned matcher** (EXP-M-02b). Blocking v1 + rule is rejected.
 
 ### EXP-M-02 — Logistic regression matcher
-- Hypothesis: A fitted linear model on the same features/candidates beats the hand weights (EXP-D-01 probe: +0.031).
+- Hypothesis: A fitted linear model on the same features/candidates beats the hand weights (EXP-D-01P probe: +0.031).
 - Model:
   - Newton-IRLS logistic regression in numpy; L2 = 1e-4 on weights, intercept unpenalised; standardised features; no class weights.
   - 20 inputs: 16 features, cheap score/rank and 2 interactions.
@@ -309,7 +418,8 @@ Every run writes `experiments/runs/<ID>/{config.yaml,metrics.json,notes.md}` (th
 - LightGBM (EXP-M-03): no evidence yet that the remaining errors are non-linear. No dependency added.
 - Decision-layer tweaks, re-measured on F-01b: top-1 fallback +0.0008, exclusivity +0.0006, per-source thresholds +0.0014 in-sample. Not pursued.
 
-### EXP-D-01 — Learned-matcher headroom probe (diagnostic, not adopted)
+### EXP-D-01P — Learned-matcher headroom probe (diagnostic, not adopted)
+- **ID note (2026-09-26):** originally logged on 2026-09-25 as `EXP-D-01`. Renamed to `EXP-D-01P` to resolve the clash with the production decision experiment **EXP-D-01** (full-competition best claimant, DEC-018). Content unchanged. Older dated entries in DEVELOPMENT_LOG and the Submission 1 report still say "EXP-D-01 probe"; read that as EXP-D-01P.
 - Date: 2026-09-25 · Owner: Claude (analysis) · Script: `scripts/analysis/matcher_headroom_probe.py` · Output: `experiments/runs/EXP-B-01/analysis/matcher_headroom_probe.json`
 - Hypothesis: The hand-weighted rule, not the features, limits precision/recall. A fitted linear model on the same features and candidates scores higher.
 - Change: Logistic regression (16 features + cheap score/rank + 2 interactions) instead of fixed weights.

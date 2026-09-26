@@ -1,0 +1,44 @@
+# EXP-B-05: wider address-word window for the two combined keys + LightGBM RETRAINED on this blocker.
+# ONE conceptual change vs EXP-B-04: the per-record address-word selection used by the combined
+# keys grows from the 3 rarest to the 5 rarest useful address words (pool DF >= 1):
+#   addr_pair.max_words  3 -> 5   (unordered word pairs per record: up to 3 -> up to 10)
+#   name_addr.max_words  3 -> 5   (name token x word keys per record: up to 6 -> up to 10)
+# Unchanged: normalization, token-quality rules (useful words, word_max_df), block caps (50),
+# top_k 20, all other passes, the 22 inputs, LightGBM hyper-parameters, the seeded 200k
+# train-fold S1 set, the inner train-fold split (early stopping + threshold), frozen validation.
+# Retraining is mandatory (DEC-017): cheap_score / cheap_rank depend on the blocker.
+# Evaluated with the EXP-D-01 decision layer (best claimant, margin 0) under full competition.
+inherit: exp_b04_blocking_v2.yaml
+
+experiment:
+  id: EXP-B-05
+
+paths:
+  output_dir: experiments/runs/EXP-B-05/output   # never the production output/ folder
+
+blocking:
+  passes:
+    name_addr:
+      max_words: 5
+    addr_pair:
+      max_words: 5
+
+scoring:
+  tag: scored_EXP-B-05         # own validation / test parts (B-04 parts untouched)
+  eval_source_tag: null
+
+matcher:
+  type: lightgbm
+  model_path: null             # own model: experiments/runs/EXP-B-05/model.json
+
+fit:
+  max_train_s1: 200000         # same seeded train-fold S1 set as EXP-B-04 (validation excluded)
+  reuse_fit_parts: null        # MUST re-block the train-fold S1 with this blocker
+  dev_subsample_s1: null
+
+decision:
+  threshold_from: model
+  competition:                 # EXP-D-01 layer, unchanged
+    enabled: true
+    rule: best_claimant
+    margin: 0.0

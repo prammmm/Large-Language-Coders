@@ -372,3 +372,120 @@ EXP-D-01: best-claimant conflict resolution at inference. It needs no retraining
 - `src/ber/models/` is still untracked in git; the team must commit it.
 - New derived data: `data/processed/train/forensic_alltrain_B04/` (42.5M scored pairs, can be deleted).
 - Nothing committed; no dependency change.
+
+---
+
+## 2026-09-26 — Stage 1: EXP-D-01 full-competition best-claimant resolution (Claude Code)
+
+### Objective
+Implement, test and validate, under full competition, the decision rule from the POST-0.91 forensic analysis. B-04 stays the control; no retraining and no blocker, feature or threshold change.
+
+### Work completed
+- Compliance check:
+  - the official text says S1 is *deduplicated*;
+  - per-record exclusivity is not an explicit rule;
+  - the train ground truth shows every S2/S3 id belongs to exactly one S1.
+- Code:
+  - `src/ber/decision/competition.py` (rule + statistics);
+  - `run_baseline.submit` applies it when `decision.competition.enabled` (off by default); competition statistics go into `submission_summary.json`;
+  - new `experiment.allowed_stages` guard;
+  - config `configs/exp_d01_best_claimant.yaml`, which re-uses the B-04 scores and model read-only and writes to `experiments/runs/EXP-D-01/output`.
+- Scripts: `scripts/experiments/eval_exp_d01.py` (full-competition evaluation, re-using `forensic_alltrain_B04`) and `scripts/analysis/verify_d01_outputs.py`.
+- Tests: `tests/test_competition.py` (12, including a synthetic end-to-end run). **107 / 107 passing.**
+- Wrote test outputs to `experiments/runs/EXP-D-01/output/`. Strict and official (`--check-ids`) validators PASS. The B-04 `output/` sha256 is unchanged.
+- Docs:
+  - EXPERIMENT_LOG: EXP-D-01; B-04 row now shows LB ≈0.91;
+  - DECISION_LOG: DEC-018 (Proposed);
+  - MODEL_AND_PIPELINE_EXPLAINED: §2.7b;
+  - report: `experiments/runs/EXP-D-01/REPORT.md`.
+
+### Result
+- On E (2,006,821 out-of-sample S1s, all 2.2M train S1s compete):
+  - F0.5 0.9273 → **0.9313**;
+  - P 0.9775 → 0.9840, R 0.8576 → 0.8562;
+  - false merges −29.8%;
+  - India +0.0060, US +0.0027;
+  - halves +0.0039 to +0.0040.
+- Test: −49,954 predictions; conflicts 41,560 → 0.
+- **KEEP · READY FOR HUMAN REVIEW.**
+
+### Not done (by instruction)
+No submission. `output/` untouched. Stage 2 (blocking/retrieval) not started. Nothing committed; no dependency change.
+
+---
+
+## 2026-09-26 — EXP-B-05: wider address-word window (3 → 5) + retrained LightGBM, with D-01 (Claude Code)
+
+### Objective
+Test whether a 5-word window for the combined address keys recovers missed (mainly India) true pairs, with the model retrained on the new blocker and D-01 on top. Control: B-04 + D-01.
+
+### Work completed
+- Config `configs/exp_b05_addr_window5.yaml`. The window was already a config knob, so there is no blocker code change. The output dir is the run folder, never `output/`.
+- Tests: `tests/test_blocking_b05.py` (12, including a synthetic end-to-end run with retrain and D-01). **119 / 119 passing.**
+- Scripts:
+  - `scripts/experiments/eval_exp_b05.py` (two-arm full-competition comparison, false-merge categories, test diagnostics);
+  - `scripts/analysis/compare_blocking_fates.py`;
+  - `scripts/analysis/d01_threshold_attribution.py` (diagnostic);
+  - `blocking_forensics.py` gained `--dump` and candidate distributions.
+- Runs:
+  - blocking sweep (ctrl / w5 / ap5 / na5);
+  - uncapped forensics for both blockers;
+  - 2% sample end-to-end (official validator with `--check-ids` PASS);
+  - fit + validation (F0.5 0.9277, threshold 0.62);
+  - all-train scoring (`forensic_alltrain_B05`);
+  - test inference (`scored_EXP-B-05`; no output files written).
+- Docs: EXPERIMENT_LOG (EXP-B-05), MODEL_AND_PIPELINE_EXPLAINED (§2.4 note), report `experiments/runs/EXP-B-05/REPORT.md`.
+
+### Result
+- On E: B-04 + D-01 0.9313 → B-05 + D-01 0.9324 (+0.0010); halves +0.0010 to +0.0012; P −0.0027; false merges +18.8%.
+- Attribution: the blocker is worth +0.0005 at a matched threshold.
+- Block-cap growth loses 761 true pairs; top-K displacement pushes out 3,024.
+- **REJECTED · NOT READY.** B-04 + D-01 stays best.
+- Proposed next: EXP-N-02, train-learned transliteration. Script mismatch is 42% of India's unreachable pairs; the DEC-009 fair-play confirmation is needed first.
+
+### Notes
+- The ID EXP-D-01 is also used by an older 2026-09-25 diagnostic in EXPERIMENT_LOG; flagged for the team, not renamed.
+- New derived data can be deleted:
+  - `data/processed/train/forensic_alltrain_B05/`;
+  - `data/processed/{train,test}/scored_EXP-B-05*`;
+  - `data/sample/output_b05/`.
+- Nothing committed; no dependency change; no submission.
+
+---
+
+## 2026-09-26 — EXP-N-02: train-pair-learned cross-script name view + retrained LightGBM, with D-01 (Claude Code)
+
+### Objective
+Bridge India's script-mismatch pairs with a token map learned only from provided train true pairs, then use it for blocking and scoring. LightGBM is retrained; the control is B-04 + D-01.
+
+### Work completed
+- Fair-play check: the official text forbids external lookups and augmentation, not learned representations of the provided data. DEC-009 is respected: the map is a normalization view and the features are similarities.
+- Code:
+  - `src/ber/normalization/crossscript.py` and `src/ber/pipeline/xlit.py` (learning, validation guard, final map, cross-fit plan);
+  - `run_baseline.py`: `name_xlit` in LazyPool / S1, `score_split(xmap, clear, part_prefix)`, cross-fitted `fit`, map provenance in the model meta;
+  - `blocker.py`: `blocking.name_view` (default unchanged);
+  - `pair_features.py`: `xlit_core_jaccard`, `xlit_token_set`.
+- Config: `configs/exp_n02_transliteration.yaml` (output dir = run folder).
+- Tests: `tests/test_xlit.py` (15, including leakage guards and a synthetic end-to-end run). **134 / 134 passing.**
+- Scripts:
+  - `scripts/analysis/xlit_diagnostics.py`;
+  - `scripts/experiments/eval_exp_n02.py`;
+  - `eval_exp_b05.py` generalised (`--label`, `--script-analysis`);
+  - `blocking_forensics.py` uses the map.
+- Runs:
+  - map diagnostics; block-eval; uncapped forensics + fate comparison;
+  - 2% sample end-to-end (official `--check-ids` PASS);
+  - cross-fitted fit; validation; all-train scoring (`forensic_alltrain_N02`); test inference (`scored_EXP-N-02`);
+  - two-arm evaluation;
+  - submit to `experiments/runs/EXP-N-02/output` (strict + official `--check-ids` PASS).
+- Bookkeeping:
+  - ID clash resolved: the older probe is renamed **EXP-D-01P** with a note; the production EXP-D-01 is unchanged.
+  - B-05 scored folders deleted as authorised (about 1.07 GB); the B-05 report and evidence JSONs are kept.
+- Docs: EXPERIMENT_LOG, DECISION_LOG (DEC-019 Proposed), MODEL_AND_PIPELINE_EXPLAINED, report `experiments/runs/EXP-N-02/REPORT.md`.
+
+### Result
+- On E: F0.5 0.9313 → **0.9402 (+0.0089)**, P 0.9840 → 0.9864, India +0.0210; halves +0.0089 to +0.0091; peak ≤ 4.72 GB.
+- All 12 gate criteria pass. **KEEP · READY FOR HUMAN REVIEW.**
+
+### Not done (by instruction)
+No root `output/` write, no submission, no commit or push. No dependency change.

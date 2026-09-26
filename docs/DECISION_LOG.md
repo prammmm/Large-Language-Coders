@@ -210,6 +210,72 @@ Status: Proposed
 
 ---
 
+## DEC-019 — Train-pair-learned cross-script name view (EXP-N-02)
+
+Date: 2026-09-26
+
+Context:
+- Script mismatch (Latin S1 vs Indic-script pool names) was India's largest remaining retrieval and scoring loss.
+- The official materials forbid external lookups and data, but not representations learned from the provided train data.
+
+Decision (proposed):
+- Learn a non-Latin → Latin token map **only from provided train true-match pairs**: co-occurrence over distinct S1 entities, support ≥ 3, confidence ≥ 0.5, ties rejected.
+- Use it for:
+  - a `name_xlit` view feeding the name-token blocking keys (`blocking.name_view`);
+  - two similarity features.
+- Leakage rules for any learned representation:
+  - the evaluation/test map is learned from the fit S1s only;
+  - training rows use cross-fitted out-of-fold maps;
+  - the inner-tune fold contributes to no map;
+  - validation S1s raise `LeakageError`.
+- LightGBM is retrained (DEC-017).
+
+Evidence (EXP-N-02, E = 2,006,821 out-of-sample S1s, full competition + D-01):
+- F0.5 0.9313 → 0.9402; P 0.9840 → 0.9864;
+- India +0.0210;
+- halves +0.0089 to +0.0091.
+
+Trade-offs:
+- `fit` about 3× slower (cross-fit: ≈ 20 min).
+- 518 validation true pairs are lost to block-cap growth.
+- Indic legal-form tokens stay unmapped.
+- No new dependency.
+
+Status: Proposed. Awaiting human review.
+
+---
+
+## DEC-018 — Full-competition best-claimant resolution in the decision layer (EXP-D-01)
+
+Date: 2026-09-26
+
+Context:
+- DEC-007 kept the decision layer to one global threshold. Exclusivity was measured at ≤ +0.001, but only on the validation fold, where about 90% of a record's competing S1s are absent.
+- On test, all S1s are scored together. The forensic analysis (POST-0.91) scored all 2.2M train S1s to reproduce this.
+- Official text: "Source 1 is the deduplicated reference source."
+- Train ground truth: every matched S2/S3 id belongs to exactly one S1.
+- Per-record exclusivity is **not** an explicit challenge rule.
+
+Decision (proposed):
+- After the threshold, each S2/S3 record predicted by several S1s is kept only for the highest-scoring S1. Margin 0; ties go to the lowest S1 row.
+- Implemented in `src/ber/decision/competition.py`. `submit` applies it when `decision.competition.enabled`; the default is off.
+- Rules that depend on competition must be validated with all S1s competing (all-train scoring, out-of-sample evaluation), never on the 10% validation fold alone.
+
+Evidence (EXP-D-01, E = 2,006,821 out-of-sample S1s):
+- F0.5 0.9273 → 0.9313, P 0.9775 → 0.9840, R 0.8576 → 0.8562.
+- False merges −29.8%.
+- Halves +0.0039 to +0.0040.
+- Out-of-sample competitors only: +0.0037.
+
+Trade-offs:
+- About 18% of removed claims are true matches, mostly in close contests between near-duplicate S1s.
+- If test did not share the train exclusivity structure, the only effect is lost recall on 0.95% of predictions.
+- Runtime is negligible (about 5 s).
+
+Status: Proposed. Awaiting human review (supersedes the "no exclusivity" part of DEC-007 if accepted).
+
+---
+
 ## DEC-017 — Blocking V2 (combined keys) and the rule "blocking change ⇒ retrain"
 
 Date: 2026-09-25
@@ -269,7 +335,7 @@ Status: Proposed (dependency installed and pinned; adoption pending the team's f
 
 Date: 2026-09-25
 
-Context: The weighted rule (DEC-006 Baseline 1) left 0.125 F0.5 between the realised score and the oracle. EXP-D-01 and EXP-M-02 measured about +0.031 from fitting the weights. scikit-learn and LightGBM are not in the env.
+Context: The weighted rule (DEC-006 Baseline 1) left 0.125 F0.5 between the realised score and the oracle. EXP-D-01P (headroom probe; renamed from EXP-D-01) and EXP-M-02 measured about +0.031 from fitting the weights. scikit-learn and LightGBM are not in the env.
 
 Options considered:
 - Option A: Keep the rule.

@@ -127,6 +127,26 @@ flowchart LR
 - **Why the model must be retrained after a blocking change.** Two of the model's inputs, `cheap_score` and `cheap_rank`, come from the blocker. New keys change these numbers even for pairs that were already candidates. EXP-B-03a showed that an *old* model then accepts thousands of wrong pairs. So EXP-B-04 re-generates the train-fold candidates with the new blocker and trains a fresh LightGBM on them (same settings, same train-fold businesses).
 
 > **Simple Hindi:** Blocking V2 do naye tarike jodta hai: (1) naam ka koi word + address ka koi word dono match hon, (2) address ke do words match hon. Isse woh sahi records bhi shortlist ho jaate hain jinka naam thoda alag likha ho ya house number na ho. Blocking badalne se model ko milne wale kuch features (cheap score / rank) bhi badal jaate hain, isliye naye blocker ke candidates par model ko dobara train karna zaroori hai.
+- **Wider address-word retrieval (EXP-B-05, tested and rejected).** The blocker kept up to five useful address words instead of three when constructing the existing combined address keys. This can recover pairs whose shared address evidence was outside the previous selection window.
+  - Measured:
+    - recall@20 +0.0018;
+    - final F0.5 +0.0010 with D-01 (only about +0.0005 from the blocker itself);
+    - precision −0.0027.
+  - Why it didn't pay off:
+    - Pool records also emit more keys, so some blocks grew past the size cap of 50 and were dropped; 761 true pairs that used to be found were lost.
+    - The extra candidates push other true pairs out of the top-20.
+  - Window 3 is kept.
+  - Like any blocking change, it required **retraining LightGBM**, because `cheap_score` and `cheap_rank` come from the blocker. A model trained on the old blocker's numbers mis-reads the new ones (see EXP-B-03a).
+
+> **Simple Hindi:** Ab blocker sirf 3 address words par depend nahi karega. Zarurat ke hisaab se 5 useful address words tak use karega, jisse kuch aise true matches mil sakte hain jo pehle selection window se bahar reh jaate the. Humne ise test kiya (EXP-B-05): kuch naye sahi matches mile, lekin fayda bahut chhota tha (+0.001) aur precision thodi giri, kyonki zyada keys se kuch blocks 50 ki limit se bade ho gaye aur drop ho gaye. Isliye hum 3 words hi rakhte hain. Blocker badalne par LightGBM ko dobara train karna zaroori hai, kyonki model ke do input (cheap score / cheap rank) blocker se hi aate hain.
+- **Cross-script name view (EXP-N-02, proposed, DEC-019).**
+  - **What it does.** Many Indian pool records spell the business name in an Indic script (Devanagari, Gurmukhi, Gujarati, Tamil, Malayalam, …), while the S1 name is in Latin letters. We learn a token map **only from provided train true pairs**. If a non-Latin token keeps appearing with the same Latin token across many different matched businesses, it maps to it; one-off or tied cases are rejected. There is no external dictionary or transliteration package.
+  - **The view.** `name_xlit` equals `name_core` with mapped tokens replaced, so Latin names are unchanged. The existing name keys use this view, and two features measure name agreement on it.
+  - **No leakage.** The map used on validation and test is learned only from the training businesses. While training the model, each business's features use a map that never saw that business's own pairs.
+  - **Retraining.** The model is retrained, because the blocker and features change.
+  - **Measured.** F0.5 0.9313 → 0.9402 with D-01; India +0.021; precision also rose.
+
+> **Simple Hindi:** Kai Indian records mein business ka naam Hindi/Punjabi/Gujarati/Tamil jaisi lipi mein likha hota hai, jabki S1 mein wahi naam English letters mein hota hai. Hum train data ke sahi matches se khud seekhte hain ki kaunsa Indic word kis English word ke saath baar-baar aata hai (jaise "शर्मा" → "sharma"). Koi bahar ki dictionary ya internet use nahi hota. Isse aise records shortlist bhi hote hain aur model ko naam ka match bhi dikhta hai, isliye galat merges kam hote hain aur sahi matches zyada milte hain. Validation/test ke liye map sirf training businesses se seekha jaata hai, taaki leakage na ho.
 - **Trained?** No. Blocking is deterministic; only its settings were chosen by measurement.
 
 > **Simple Hindi:** Blocking ka kaam ye hai ki har business ko poore dataset ke har record ke saath compare na karke sirf likely matching records ko shortlist karna. Agar sahi match shortlist mein nahi aaya, to aage ka model use kabhi nahi dhoondh sakta.
@@ -162,7 +182,7 @@ There are two matchers; `matcher.type` in the config chooses one.
 - **Why LR replaced the rule:** On *identical* candidates and features, LR scored 0.8158 vs 0.7851 (EXP-M-02), with equal or better precision.
   - The hand weights over-trusted name similarity and under-trusted strong address evidence.
 - **Why not LightGBM yet:** There's no evidence yet that the remaining errors need non-linear trees. It would add a dependency, so it waits for evidence.
-- **Diagnostic model (not production):** EXP-D-01 used PyTorch only as an optimiser to *estimate* LR headroom. PyTorch is not used by the pipeline.
+- **Diagnostic model (not production):** EXP-D-01P (probe) used PyTorch only as an optimiser to *estimate* LR headroom. PyTorch is not used by the pipeline.
 
 > **Simple Hindi:** Logistic regression ek simple ML model hai jo har feature ko ek weight deta hai aur unka jod karke 0 se 1 ke beech probability nikalta hai. Ye weights hum khud nahi chunte — model training data (sirf train-fold businesses) se seekhta hai.
 
@@ -203,9 +223,31 @@ There are two matchers; `matcher.type` in the config chooses one.
 - **Where the threshold comes from:**
   - Current best: tuned during `fit` on an **inner 20% of the train-fold S1s** (`threshold_from: model`). The validation set is not used, and the chosen value equalled the validation optimum in every run.
   - Submission 1: tuned on the validation set (`val_sweep`, slightly optimistic).
-- **Not used (measured ≤ +0.001):** top-1 fallback, exclusivity, per-source or per-country thresholds.
+- **Not used (measured ≤ +0.001):** top-1 fallback, per-source or per-country thresholds. Exclusivity measured on the validation fold only is superseded by §2.7b.
 
 > **Simple Hindi:** Threshold ek cut-off hai — score is se upar ho to "match", neeche ho to "match nahi". Threshold zyada rakhoge to galat match kam honge (precision badhegi) par kuch sahi match chhoot jaayenge (recall ghategi).
+
+### 2.7b Competition resolution (EXP-D-01, `src/ber/decision/competition.py`; proposed, DEC-018)
+
+**What it is.** When multiple businesses claim the same pool record, the system keeps the highest-scoring claimant.
+- It runs after the threshold, over all S1s together.
+- Ties go to the lowest S1 row.
+- It only removes predictions; candidates never change.
+
+**Why we test it.**
+- The challenge says Source 1 is *deduplicated*.
+- In the train labels, every S2/S3 record belongs to at most one S1.
+- The challenge does **not** explicitly promise this for test, so the rule is an evidence-based hypothesis, not a guaranteed rule.
+
+**Why normal validation hid the effect.**
+- The validation fold contains only 10% of the train S1s, so most businesses that could compete for a record are missing, and conflicts almost never appear. There the rule measured ≤ +0.0005.
+- On test, all S1s are scored together.
+
+**Why full competition is necessary.**
+- We scored all 2.2M train S1s so they compete as on test, and measured only the S1s the model never trained on.
+- Result: F0.5 0.9273 → 0.9313, precision 0.9775 → 0.9840, 30% fewer false merges, stable in every half.
+
+> **Simple Hindi:** Agar ek hi S2/S3 record ko kai businesses claim karte hain, to system sabse high score wale business ko rakhta hai aur baaki claims hata deta hai. Normal validation mein sirf 10% businesses the, isliye aise takraav (conflict) dikhte hi nahi the. Test par saare businesses ek saath hote hain, isliye humne train ke saare 22 lakh businesses ko ek saath score karke test jaisa mahaul banaya aur wahan ye rule sach mein madad karta hai. Dhyaan rahe: "ek record sirf ek business ka" train data mein dikhta hai, challenge ne ise test ke liye pakka niyam nahi bataya — isliye ise hum saboot par aadharit hypothesis maante hain.
 
 ### 2.8 Writer and validators (`src/ber/submission/`)
 
@@ -236,7 +278,7 @@ There are two matchers; `matcher.type` in the config chooses one.
 | Logistic regression (Submission 2) | **Yes** | 22 weights + intercept, from train-fold S1 pairs |
 | LightGBM (EXP-M-03 candidate) | **Yes** | tree splits and leaf values, from the same train-fold S1 pairs; early stopping and threshold on the inner train-fold split |
 | Threshold | Tuned (one number) | inner train-fold split (current best) |
-| EXP-D-01 probe | Diagnostic only | not part of the pipeline |
+| EXP-D-01P probe | Diagnostic only | not part of the pipeline |
 
 ---
 
@@ -252,7 +294,7 @@ There are two matchers; `matcher.type` in the config chooses one.
 | PyYAML | configs, `--set` overrides | config | readable, explicit settings | — |
 | pytest | 78 tests (synthetic data only) | `tests/` | reproducibility | — |
 | psutil | memory measurement | runtime logs, block-eval | machine has 16 GB total | — |
-| PyTorch 2.14 (CUDA) | **not used by the pipeline**; EXP-D-01 diagnostic probe only | `scripts/analysis/matcher_headroom_probe.py` | installed at the team's request | any future production model must be MIT/Apache and ≤8B params |
+| PyTorch 2.14 (CUDA) | **not used by the pipeline**; EXP-D-01P diagnostic probe only | `scripts/analysis/matcher_headroom_probe.py` | installed at the team's request | any future production model must be MIT/Apache and ≤8B params |
 | LightGBM 4.7.0 (MIT) | tree matcher (EXP-M-03) | `src/ber/models/gbdt.py` | strongest measured scorer; CPU, fast, deterministic with a seed | pinned in `environment.yml` / `requirements.txt` (DEC-016) |
 | SciPy 1.18 | required by LightGBM only | — | dependency | — |
 | scikit-learn | **not used** | — | not needed (LR in numpy, trees in LightGBM) | — |

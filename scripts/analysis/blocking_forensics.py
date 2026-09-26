@@ -38,7 +38,7 @@ from ber.data.normalize_records import load_manifest, read_country  # noqa: E402
 from ber.data.split import load_val_ids  # noqa: E402
 from ber.features.pair_features import strip_zeros_list  # noqa: E402
 from ber.normalization.views import ADDRESS_STOPWORDS  # noqa: E402
-from ber.pipeline.run_baseline import VIEW_COLS, LazyPool, _ids, pool_ids  # noqa: E402
+from ber.pipeline.run_baseline import VIEW_COLS, LazyPool, _ids, pool_ids, resolve_xmap, with_xlit  # noqa: E402
 from ber.utils.runtime import LOG, PeakMemory, configure_arrow, setup_logging, stage, write_json  # noqa: E402
 
 SHIFT = np.int64(1) << np.int64(24)
@@ -58,6 +58,7 @@ def main():
     ap.add_argument("--config", default="configs/exp_b04_blocking_v2.yaml")
     ap.add_argument("--raw-topk", type=int, default=200)
     ap.add_argument("--out", default="experiments/runs/POST-0.91-FORENSIC/blocking_forensics.json")
+    ap.add_argument("--dump", default=None, help="optional .npz with the rank of every validation true pair (for config comparisons)")
     a = ap.parse_args()
     setup_logging()
     configure_arrow()
@@ -87,6 +88,7 @@ def main():
     # ---- 1. uncapped re-blocking
     bcfg = copy.deepcopy(cfg["blocking"])
     bcfg["top_k"] = a.raw_topk
+    xmap = resolve_xmap(cfg, paths)  # EXP-N-02: final (fit-set) cross-script map when enabled, else None
     codes, ranks, s1rows = [], [], []
     with stage("uncapped re-blocking"), PeakMemory() as pm:
         for key in sorted(man["source1"]["countries"]):
@@ -97,7 +99,7 @@ def main():
                 prow.append(read_country(paths, "train", source, key, ["row"]).column("row").to_numpy().astype(np.int64) + (n_s2 if src == 3 else 0))
             prow = np.concatenate(prow)
             srow = s1.column("row").to_numpy().astype(np.int64)
-            b = CountryBlocker(s1, LazyPool(paths, "train", key), bcfg)
+            b = CountryBlocker(with_xlit(s1, xmap), LazyPool(paths, "train", key, xmap), bcfg)
             for lo, hi in b.chunk_bounds():
                 c = b.candidates(lo, hi)
                 codes.append(srow[c["s1_local"]] * SHIFT + prow[c["pool_local"]])
@@ -115,6 +117,16 @@ def main():
     rep = {"config": a.config, "raw_topk": a.raw_topk, "true_pairs": int(len(gcode)),
            "reblock_runtime_s": round(pm.seconds, 1), "reblock_peak_gb": round(pm.peak_gb, 2), "recall_at_k": {}}
     s1_country = np.array([country_of[int(r)] for r in srow_all], dtype=object)
+    val_rows = pc.index_in(val_arr, value_set=s1_ids).to_numpy(zero_copy_only=False).astype(np.int64)
+    if a.dump:
+        np.savez_compressed(a.dump, gcode=gcode, g_rank=g_rank, gs=gs, gp=gp, g_country=g_country.astype(str))
+    rep["candidate_distribution"] = {}
+    for K in (20, a.raw_topk):
+        per = np.bincount(srow_all[rank < K], minlength=int(val_rows.max()) + 1)[val_rows]
+        rep["candidate_distribution"][str(K)] = {
+            "total_candidates": int(per.sum()), "mean": float(per.mean()), "median": float(np.median(per)),
+            "p95": float(np.percentile(per, 95)), "p99": float(np.percentile(per, 99)), "max": int(per.max()),
+            "s1_with_zero_candidates": int((per == 0).sum())}
     for K in (10, 20, 30, 50, 100, a.raw_topk):
         within = g_rank < K
         cand_k = rank < K

@@ -34,7 +34,8 @@ FEATURE_NAMES = (
 )
 
 # Optional features (EXP-F-01), each switched on by name via ``options["extra"]``.
-EXTRA_FEATURES = ("num_conflict", "legal_form_conflict")
+EXTRA_FEATURES = ("num_conflict", "legal_form_conflict", "xlit_core_jaccard", "xlit_token_set")
+XLIT_FEATURES = ("xlit_core_jaccard", "xlit_token_set")  # EXP-N-02: need the "name_xlit" column on both sides
 
 # Legal-form canonicalisation for the conflict feature: synonyms share one label; the
 # generic words co/company/private are ignored (they co-occur with many forms).
@@ -124,8 +125,9 @@ def pair_features(
     unknown = set(extra) - set(EXTRA_FEATURES)
     if unknown:
         raise ValueError(f"unknown extra features: {sorted(unknown)}")
-    A = {c: _take(s1, c, s1_idx) for c in S1_COLUMNS}
-    B = {c: _take(pool, c, pool_idx) for c in S1_COLUMNS}
+    cols = S1_COLUMNS + (("name_xlit",) if set(extra) & set(XLIT_FEATURES) else ())
+    A = {c: _take(s1, c, s1_idx) for c in cols}
+    B = {c: _take(pool, c, pool_idx) for c in cols}
     f: dict[str, np.ndarray] = {}
 
     f["name_norm_eq"] = _eq(A["name_norm"], B["name_norm"])
@@ -177,5 +179,14 @@ def pair_features(
             fx, fy = legal_forms(x), legal_forms(y)
             vals.append(1.0 if (fx and fy and not (fx & fy)) else 0.0)
         f["legal_form_conflict"] = np.asarray(vals, np.float32)
+
+    if set(extra) & set(XLIT_FEATURES):
+        # EXP-N-02: agreement of the train-learned cross-script name views (== name_core when unmapped)
+        xa, xb = A["name_xlit"].to_pylist(), B["name_xlit"].to_pylist()
+        x_ok = _nonempty(A["name_xlit"], B["name_xlit"])
+        if "xlit_core_jaccard" in extra:
+            f["xlit_core_jaccard"], _, _ = _set_features(xa, xb)
+        if "xlit_token_set" in extra:
+            f["xlit_token_set"] = _fuzz(xa, xb, fuzz.token_set_ratio, workers, x_ok)
 
     return {k: f[k] for k in (*FEATURE_NAMES, *extra)}

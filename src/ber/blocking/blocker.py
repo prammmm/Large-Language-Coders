@@ -261,6 +261,10 @@ class CountryBlocker:
         chunk_rows = int(cfg.get("encode_chunk_rows", 250_000))
 
         num_transform = strip_leading_zeros if cfg.get("strip_leading_zeros", False) else None
+        # EXP-N-02: the name-token passes (exact_core, sorted_core, name_addr, name_token) may read a
+        # train-learned cross-script view instead of name_core; identical to name_core for any name
+        # without a mapped token, so the default ("name_core") reproduces every earlier blocker.
+        name_view = cfg.get("name_view", "name_core")
 
         def encode(col, split, transform=None):
             # S1 records first (0..n_s1-1), then pool records (n_s1..)
@@ -271,15 +275,16 @@ class CountryBlocker:
             self._add_pass("exact_name", list(encode("name_norm", split=False)[:2]), pcfg["exact_name"])
 
         # --- Block A2: exact name_core (legal forms removed) -- EXP-B-02 (A)
-        if pcfg.get("exact_core", {}).get("enabled", False):
-            self._add_pass("exact_core", list(encode("name_core", split=False)[:2]), pcfg["exact_core"])
+        ec = pcfg.get("exact_core", {})
+        if ec.get("enabled", False) and not ec.get("with_addr_words", False):
+            self._add_pass("exact_core", list(encode(name_view, split=False)[:2]), ec)
 
         # --- Block A3: sorted name_core tokens (word-order insensitive) -- EXP-B-02 (B)
         if pcfg.get("sorted_core", {}).get("enabled", False):
-            self._add_pass("sorted_core", list(encode("name_core", split=False, transform=sort_tokens)[:2]), pcfg["sorted_core"])
+            self._add_pass("sorted_core", list(encode(name_view, split=False, transform=sort_tokens)[:2]), pcfg["sorted_core"])
 
         # --- Block B: address tokens
-        need_words = any(pcfg.get(p, {}).get("enabled", False) for p in ("addr_num_word", "addr_rare_word", "name_addr", "addr_pair"))
+        need_words = any(pcfg.get(p, {}).get("enabled", False) for p in ("addr_num_word", "addr_rare_word", "name_addr", "addr_pair")) or             (ec.get("enabled", False) and ec.get("with_addr_words", False))
         if need_words:
             w_rec, w_tok, w_vocab = encode("addr_words", split=True)
             V = len(w_vocab)
@@ -307,7 +312,7 @@ class CountryBlocker:
             # --- EXP-B-04 (B): (rarest name_core token) x (rarest useful address word)
             c = pcfg.get("name_addr", {})
             if c.get("enabled", False):
-                t_rec, t_tok, t_vocab = encode("name_core", split=True)
+                t_rec, t_tok, t_vocab = encode(name_view, split=True)
                 t_df = np.bincount(t_tok[t_rec >= self.n_s1], minlength=len(t_vocab))
                 tsel = (t_df[t_tok] >= 1) & (t_df[t_tok] <= c.get("name_max_df", 10**12))
                 wsel = useful[w_tok] & (w_df[w_tok] >= 1) & (w_df[w_tok] <= c["word_max_df"])
@@ -315,6 +320,20 @@ class CountryBlocker:
                                        c["max_words"], max(V, 1), chunk_rows))
                 del t_rec, t_tok, tsel, wsel
                 self._add_pass("name_addr", keys, c)
+
+            # --- EXP-B-07: (exact word-order-insensitive name) x (useful address word). For GENERIC names
+            # whose exact-name block exceeds the cap, the (name, word) block is small again; the shared
+            # word may be a common one (a city), so up to `max_words` words per record, rarest first.
+            if ec.get("enabled", False) and ec.get("with_addr_words", False):
+                n_rec, n_tok, n_vocab = encode(name_view, split=False, transform=sort_tokens)
+                n_df = np.bincount(n_tok[n_rec >= self.n_s1], minlength=len(n_vocab))
+                empty = pc.equal(n_vocab, "").to_numpy(zero_copy_only=False) if len(n_vocab) else np.zeros(0, bool)
+                nsel = (n_df[n_tok] >= 1) & ~empty[n_tok]
+                wsel = useful[w_tok] & (w_df[w_tok] >= 1) & (w_df[w_tok] <= ec.get("word_max_df", 10**12))
+                keys = list(cross_keys(n_rec[nsel], n_tok[nsel], n_df, 1, w_rec[wsel], w_tok[wsel], w_df,
+                                       int(ec.get("max_words", 30)), max(V, 1), chunk_rows))
+                del n_rec, n_tok, nsel, wsel
+                self._add_pass("exact_core", keys, ec)
 
             c = pcfg.get("addr_num_word", {})
             if c.get("enabled", False):
@@ -332,10 +351,21 @@ class CountryBlocker:
         # --- optional: rare name-core tokens (EXP-B-02)
         c = pcfg.get("name_token", {})
         if c.get("enabled", False):
-            t_rec, t_tok, t_vocab = encode("name_core", split=True)
+            t_rec, t_tok, t_vocab = encode(name_view, split=True)
             t_df = np.bincount(t_tok[t_rec >= self.n_s1], minlength=len(t_vocab))
-            sel = t_df[t_tok] <= c["max_df"]
-            self._add_pass("name_token", [t_rec[sel], t_tok[sel]], c)
+            if c.get("pair", False):
+                # EXP-B-06: key = unordered pair of the record's `max_tokens` rarest name tokens present
+                # in the pool (DF >= 1, DF <= name_max_df) -- a name-only key for records whose address
+                # gives no usable key (empty / generic). Same bit as name_token; block cap applies.
+                sel = (t_df[t_tok] >= 1) & (t_df[t_tok] <= c.get("name_max_df", 10**12))
+                k = int(c.get("max_tokens", 2))
+                keys = list(cross_keys(t_rec[sel], t_tok[sel], t_df, k, t_rec[sel], t_tok[sel], t_df, k,
+                                       max(len(t_vocab), 1), chunk_rows, same=True))
+                del t_rec, t_tok, sel
+                self._add_pass("name_token", keys, c)
+            else:
+                sel = t_df[t_tok] <= c["max_df"]
+                self._add_pass("name_token", [t_rec[sel], t_tok[sel]], c)
 
     # ------------------------------------------------------------------ pass building
     def _add_pass(self, name: str, arrays: list, c: dict) -> None:
