@@ -210,6 +210,61 @@ Status: Proposed
 
 ---
 
+## DEC-017 — Blocking V2 (combined keys) and the rule "blocking change ⇒ retrain"
+
+Date: 2026-09-25
+
+Context:
+- After EXP-M-03, blocking caused about 57% of the remaining validation loss.
+- 78% of the missed true pairs share a (name word + address word) or ≥ 2 address words; only 20% share a rare name word.
+- EXP-B-03a showed that the blocker-derived inputs `cheap_score` / `cheap_rank` couple the model to the blocker.
+
+Decision (proposed):
+- Add the `name_addr` and `addr_pair` passes (config-switchable, block cap 50, pool DF ≥ 1 selection), top-K 20.
+- **Any blocking change must be followed by re-generating train-fold candidates with that blocker and refitting the model.**
+
+Evidence (EXP-B-04):
+- Validation F0.5 0.9037 → 0.9274, precision 0.9790 → 0.9774; halves 0.9271 / 0.9277.
+- K=30 adds +0.0015 for +45% candidates (not adopted).
+
+Trade-offs:
+- +19% candidates.
+- Validation scoring 182 s → 378 s; peak memory ≈ 2.5 GB.
+- Test inference will take longer (not yet measured).
+
+Status: Proposed. Awaiting human review before any full test run.
+
+---
+
+## DEC-016 — Add LightGBM (MIT) as the non-linear matcher library for EXP-M-03
+
+Date: 2026-09-25
+
+Context:
+- EXP-D-02 (MLP probe) showed about +0.05 F0.5 from a non-linear scorer on the same features and protocol.
+- DEC-013's LR cannot express conditional interactions.
+- The final model must be MIT/Apache-2.0 and ≤ 8B parameters.
+
+Options considered:
+- Option A: MLP (PyTorch, BSD-3 library; the license rule's wording is ambiguous for from-scratch models).
+- **Option B: LightGBM gradient-boosted trees (MIT)**, CPU build.
+- Option C: scikit-learn HistGradientBoosting (BSD-3).
+
+Decision: **Option B.**
+- Package: `lightgbm=4.7.0` (conda-forge CPU build) in the existing `ber_hackathon` env; its required dependency `scipy` 1.18.1 comes with it. No other package changed (verified).
+- Model: a few thousand small trees (≪ 8B parameters).
+- Used only by `matcher.type: lightgbm`; LR stays available.
+
+Reason: MIT license (clearly compliant), strong on tabular features, fast on CPU (about 14 s to fit 516k pairs), deterministic with a seed.
+
+Trade-offs: New dependency, and a text model file (`model.lgb.txt`) next to `model.json`.
+
+Validation plan: EXP-M-03 (scorer-only change vs EXP-F-01b). Keep only if F0.5 and precision improve and the France test profile stays sane.
+
+Status: Proposed (dependency installed and pinned; adoption pending the team's full-scale run)
+
+---
+
 ## DEC-013 — Learned matcher: numpy logistic regression, trained on train-fold S1, threshold from an inner train-fold split
 
 Date: 2026-09-25

@@ -3,7 +3,7 @@
 #   conda activate ber_hackathon
 # Update after edits:  conda env update -f environment.yml --prune
 # Library licenses: numpy/pandas (BSD-3), pyarrow (Apache-2.0), rapidfuzz (MIT),
-# pyyaml (MIT), pytest (MIT). No ML model weights are used in Submission 1.
+# pyyaml (MIT), pytest (MIT), lightgbm (MIT), scipy (BSD-3). No pretrained model weights are used.
 name: ber_hackathon
 channels:
   - conda-forge
@@ -18,5 +18,7 @@ dependencies:
   - pyyaml=6.0.*
   - pytest=8.4.*
   - psutil
+  - lightgbm=4.7.0=cpu*   # EXP-M-03 matcher (MIT); pulls scipy
+  - scipy=1.18.*
   - pip:
       - -e .            # installs the `ber` package from src/ (editable)

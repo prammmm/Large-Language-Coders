@@ -31,11 +31,11 @@ VARIANTS: dict[str, tuple[str, list[str]]] = {
 }
 
 
-def summarise(runs: Path, names: list[str], variants: dict) -> tuple[list[dict], str]:
+def summarise(runs: Path, names: list[str], variants: dict, prefix: str = "EXP-B-02") -> tuple[list[dict], str]:
     rows = []
     base = None
     for v in names:
-        f = runs / f"EXP-B-02-{v}" / "blocking_eval.json"
+        f = runs / f"{prefix}-{v}" / "blocking_eval.json"
         if not f.exists():
             continue
         r = json.loads(f.read_text(encoding="utf-8"))
@@ -51,7 +51,7 @@ def summarise(runs: Path, names: list[str], variants: dict) -> tuple[list[dict],
                 for c, cv in a["by_country"].items():
                     row[f"{c}_recall@{k}"] = cv["blocking_recall"]
         row["contribution"] = r["pass_contribution_at_top_k"]
-        if v == "v0":
+        if v == names[0]:
             base = row
         rows.append(row)
     lines = ["| variant | change | recall@20 | Δ vs v0 | India@20 | US@20 | cand/S1@20 | p99@20 | new true pairs@20 | extra cand pairs@20 | recall@30 | cand/S1@30 | runtime s | peak GB |",
@@ -74,24 +74,25 @@ def main() -> None:
     ap.add_argument("--only", nargs="*", default=None)
     ap.add_argument("--variants-file", default=None, help="JSON {name: [description, [--set items]]} to add/override variants")
     ap.add_argument("--summary-only", action="store_true")
+    ap.add_argument("--prefix", default="EXP-B-02", help="run-id prefix; summary goes to experiments/runs/<prefix>/")
     a = ap.parse_args()
     variants = dict(VARIANTS)
     if a.variants_file:
         variants.update({k: (v[0], v[1]) for k, v in json.loads(Path(a.variants_file).read_text(encoding="utf-8")).items()})
     names = a.only or list(variants)
-    if "v0" not in names:
+    if not a.variants_file and "v0" not in names:
         names = ["v0"] + names
     if not a.summary_only:
         for v in names:
-            sets = BASE + variants[v][1] + [f"experiment.id=EXP-B-02-{v}"]
+            sets = BASE + variants[v][1] + [f"experiment.id={a.prefix}-{v}"]
             cmd = [sys.executable, "-m", "ber.pipeline.run_baseline", "block-eval", "--config", a.config]
             for s in sets:
                 cmd += ["--set", s]
             print(">>", v, variants[v][0], flush=True)
             subprocess.run(cmd, check=True)
     runs = Path("experiments/runs")
-    rows, md = summarise(runs, names, variants)
-    out = runs / "EXP-B-02"
+    rows, md = summarise(runs, names, variants, a.prefix)
+    out = runs / a.prefix
     out.mkdir(parents=True, exist_ok=True)
     (out / "blocking_sweep.json").write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
     (out / "blocking_sweep.md").write_text(md, encoding="utf-8")

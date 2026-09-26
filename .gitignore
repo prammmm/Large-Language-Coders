@@ -40,7 +40,7 @@ submissions/
 *.zip
 
 # --- Model binaries & experiment artifacts ----------------------------------
-models/
+/models/
 *.pkl
 *.pickle
 *.joblib

@@ -1,0 +1,31 @@
+# EXP-B-03a: enable the existing name-token blocking pass. ONE change vs EXP-M-03 (Submission 3).
+# Scorer = the EXACT EXP-M-03 LightGBM model file (not retrained) with its train-fold threshold
+# (0.67), so any change in the score is attributable to candidate generation.
+# Everything else (normalization, features, all other blocking keys, top_k 20, caps, output
+# rules, frozen validation split) is inherited unchanged from EXP-M-03.
+#
+# name_token pass (blocker.py): key = one name_core token (legal forms already removed);
+#   max_df 200 = keep only tokens that occur in <= 200 pool records of the country
+#   (drops generic words: and, the, group, city names ...); the same 200 caps block size.
+inherit: exp_m03_lgbm.yaml
+
+experiment:
+  id: EXP-B-03a
+
+blocking:
+  passes:
+    name_token:
+      enabled: true
+      max_df: 200            # explicit, unchanged from the existing design (measured in EXP-B-02 d)
+      weight: 1.0
+
+scoring:
+  tag: scored_EXP-B-03a      # new validation parts (`train`) and test parts (`infer`)
+  eval_source_tag: null      # validation must be RE-BLOCKED with the new pass (no re-use)
+
+matcher:
+  type: lightgbm
+  model_path: experiments/runs/EXP-M-03/model.json   # fixed Submission-3 model, no `fit` stage
+
+decision:
+  threshold_from: model      # 0.67 from EXP-M-03's inner train-fold split

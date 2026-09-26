@@ -1,4 +1,4 @@
-# How our entity-resolution system works (implemented system, Phase 2)
+# How our entity-resolution system works (implemented system, Phase 3)
 
 This document explains **what the code actually does today**, in plain language. It does not cover future ideas.
 
@@ -6,12 +6,13 @@ This document explains **what the code actually does today**, in plain language.
 - **What was measured**: [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md).
 - **How to run it**: [../README.md](../README.md).
 
-There are two systems in the repo:
+There are three systems in the repo; they share everything up to the matcher:
 
-| System | Config | Status |
-|---|---|---|
-| **Submission 1** (EXP-B-01) | `configs/baseline_v0.yaml` | Blocking v0 + **hand-weighted rule** (not trained). Public LB 0.751, validation 0.7851 |
-| **Current best** (EXP-F-01b) | `configs/exp_f01b_conflicts_zeros.yaml` | Blocking v1 + 18 features + **logistic regression (trained)**. Validation 0.8371 at dev scale (precision 0.9316); full-scale run pending |
+| System | Config | Matcher | Status |
+|---|---|---|---|
+| **Submission 1** (EXP-B-01) | `configs/baseline_v0.yaml` | hand-weighted rule (**not trained**) | LB 0.751, validation 0.7851 |
+| **Submission 2** (EXP-F-01b) | `configs/exp_f01b_conflicts_zeros.yaml` | **logistic regression** (trained) | LB 0.815, validation 0.8372 (precision 0.932) |
+| **Candidate** (EXP-M-03) | `configs/exp_m03_lgbm.yaml` | **LightGBM** (trained) | validation 0.9021 at dev scale (precision 0.978); full run and France check pending |
 
 ---
 
@@ -24,7 +25,7 @@ flowchart LR
     C --> D[Split by country<br/>open set]
     D --> E[Blocking<br/>shortlist candidates]
     E --> F[Pair features<br/>18 numbers per pair]
-    F --> G[Matcher<br/>rule or logistic regression]
+    F --> G[Matcher<br/>rule · logistic regression · LightGBM]
     G --> H[Threshold<br/>score ≥ t → match]
     H --> I[Writer + validators<br/>2 TSV files]
 ```
@@ -94,7 +95,7 @@ flowchart LR
      | addr_num_word | (house number, rare address word) | on | on, **numbers compared without leading zeros** (`04126` = `4126`) |
      | addr_rare_word | a very rare address word | on | on |
      | **sorted_core** | name without legal forms, words sorted (`advanced parts`) | off | **on** |
-     | name_token, exact_core | — | off | off (measured, not worth it) |
+     | name_token, exact_core | — | off | off (measured; name_token re-tested with LightGBM in EXP-B-03a and rejected, see below) |
 
   2. Blocks larger than 50 records are skipped, because generic keys would create millions of useless pairs.
   3. Pairs from all passes are merged and de-duplicated. Each gets a *cheap score* (the rarer the shared keys, the higher), and the best **20 per S1** are kept.
@@ -106,6 +107,26 @@ flowchart LR
 
   Blocking recall went from 0.798 to 0.860.
 - **Important:** A true match that blocking misses **can never be found later**. The matcher only sees the shortlist.
+- **Name-token blocking (tested, not used).**
+  - *What it is:* it retrieves records that share one *rare* word of the business name (after removing legal forms). A word counts as rare if it appears in ≤ 200 records of the country's pool, so words like "and", "group" or city names are ignored.
+  - *Why it was off:* with the old hand-weighted rule, its extra candidates produced many false merges (EXP-B-02).
+  - *Why we re-tested it:* LightGBM is much better at rejecting hard negatives.
+  - *What we measured* (EXP-B-03a, fixed Submission-3 model): the new candidates were fine. The model rejected 98.9% of them and accepted 3,932 true vs 182 false pairs.
+  - *But the total score dropped* (0.9037 → 0.9027): the extra keys also change two blocking-derived model inputs (`cheap_score`, `cheap_rank`) of existing candidates, and a model trained on the old values then accepts ~4,000 more wrong pairs.
+  - *Lessons:* (1) blocking changes require retraining the model on candidates from the same blocker; (2) this key only reaches pairs sharing *rare* name words, so its best-case gain is small (≈ +0.002).
+
+> **Simple Hindi:** Name-token blocking mein hum poora business name same hone ka wait nahi karte — agar do records mein naam ka koi rare (kam dikhne wala) word common hai, to unhe candidate bana dete hain. Humne ise LightGBM ke saath test kiya: naye candidates theek the, lekin blocking badalne se model ke do input numbers (cheap score / rank) bhi badal gaye, jis se purane model ne kuch galat match accept kar liye. Isliye blocking badalne par model ko dobara train karna zaroori hai.
+
+- **Blocking V2 (EXP-B-04, candidate): combined keys.** Two new keys, each capped (at most 50 pool records per block) and switched in the config:
+  - **`name_addr`:** (one of the record's 2 rarest name words) × (one of its 3 rarest useful address words). It links two records that share a *common* name word (a brand, say) **and** an address word, e.g. "Sunrise …, Maple …" with "SUNRISE …, Maple Ave". The name word alone would be too frequent to use as a key.
+  - **`addr_pair`:** any pair of the record's 3 rarest useful address words. It links records at the same street and locality even when the names differ and there's no house number.
+  - Only words that actually occur in the country's pool can be chosen, so no key slot is wasted on words with no possible partner.
+  - **Why:** of the true pairs the old blocker missed, 78% share evidence these keys can use, but only 20% share a *rare* name word (`scripts/analysis/blocking_gap_probe.py`).
+  - **Cost:** about 19% more candidates per business (16.1 → 19.3) and peak memory about 2.5 GB instead of 1.6 GB.
+  - **Measured on validation** (blocking only): recall 0.860 → 0.927 (India 0.831 → 0.882, US 0.879 → 0.957).
+- **Why the model must be retrained after a blocking change.** Two of the model's inputs, `cheap_score` and `cheap_rank`, come from the blocker. New keys change these numbers even for pairs that were already candidates. EXP-B-03a showed that an *old* model then accepts thousands of wrong pairs. So EXP-B-04 re-generates the train-fold candidates with the new blocker and trains a fresh LightGBM on them (same settings, same train-fold businesses).
+
+> **Simple Hindi:** Blocking V2 do naye tarike jodta hai: (1) naam ka koi word + address ka koi word dono match hon, (2) address ke do words match hon. Isse woh sahi records bhi shortlist ho jaate hain jinka naam thoda alag likha ho ya house number na ho. Blocking badalne se model ko milne wale kuch features (cheap score / rank) bhi badal jaate hain, isliye naye blocker ke candidates par model ko dobara train karna zaroori hai.
 - **Trained?** No. Blocking is deterministic; only its settings were chosen by measurement.
 
 > **Simple Hindi:** Blocking ka kaam ye hai ki har business ko poore dataset ke har record ke saath compare na karke sirf likely matching records ko shortlist karna. Agar sahi match shortlist mein nahi aaya, to aage ka model use kabhi nahi dhoondh sakta.
@@ -145,6 +166,37 @@ There are two matchers; `matcher.type` in the config chooses one.
 
 > **Simple Hindi:** Logistic regression ek simple ML model hai jo har feature ko ek weight deta hai aur unka jod karke 0 se 1 ke beech probability nikalta hai. Ye weights hum khud nahi chunte — model training data (sirf train-fold businesses) se seekhta hai.
 
+### 2.6b LightGBM matcher (EXP-M-03, `src/ber/models/gbdt.py`)
+
+- **What it is:** gradient-boosted decision trees. Hundreds of small trees are added one after another, each correcting the mistakes of the previous ones. The output is a match probability between 0 and 1.
+- **What goes in:** exactly the same 22 inputs as the logistic regression: 18 features + cheap score and rank + 2 products.
+- **What comes out:** one probability per candidate pair.
+- **What is learned:** the tree splits (e.g. "is `num_conflict` = 1?", "is `name_ratio` > 0.9?") and the value in every leaf.
+  - Training data: candidate pairs of 200k **train-fold** S1s, labelled from the ground truth (1 = the pair is in `train_ground_truth.tsv`).
+- **How it's trained:**
+  - The train-fold S1s are split by a seeded hash: 80% fit the trees, and 20% are used for early stopping and to choose the threshold.
+  - The frozen validation S1s are **never** used. The code raises an error if any validation S1 appears in the training rows.
+- **Why trees instead of logistic regression:**
+  - Logistic regression is *linear*: it adds up evidence with fixed weights.
+  - This data needs *conditional* rules: "names almost identical **and** house numbers agree → match; names almost identical **but** house numbers conflict → no match".
+  - A tree can split on name similarity first and then on the number conflict inside that branch. The linear model can only give each feature one fixed weight.
+  - Measured: same features, same candidates → F0.5 0.8375 (LR) vs 0.9021 (LightGBM), with precision 0.934 → 0.978 and false merges 35.8k → 13.0k (dev scale; EXPERIMENT_LOG EXP-M-03).
+- **Why we *tested* it rather than assuming it's better:** trees can also overfit or behave oddly on data unlike the training data (France has no labels). That's why EXP-M-03 is judged on validation halves, several seeds and a France test profile.
+- **Why not embeddings or transformers:**
+  - The measured gap was in *how* existing features are combined, which a small tabular model fixes.
+  - Embeddings over ~10M records would cost far more memory and time and add license questions (the model must be MIT/Apache and ≤ 8B parameters).
+  - There's no measured evidence yet that they're needed.
+- **What the model uses most** (gain share; this shows *usage*, not cause):
+  - `name_ratio × addr_token_set` 67%: "the names look alike AND the addresses share words";
+  - `name_core_jaccard × addr_num_jaccard` 5%: "same core name words AND same house numbers";
+  - `addr_token_set` 5%;
+  - `cheap_score` 4% (how strongly blocking linked the pair);
+  - `addr_num_jaccard` 3.5%.
+- **Known risk:** in France, business names often contain the city (`bordeaux …`, `lille …`), and different streets can share a house number. On a test sample LightGBM accepted more such pairs than LR. Checked with `scripts/analysis/test_country_profile.py`.
+- **Trained?** Yes. **Library:** LightGBM 4.7.0 (MIT), CPU; the model is a text file `model.lgb.txt` plus `model.json`.
+
+> **Simple Hindi:** LightGBM bahut saare chhote decision trees ka group hai. Har tree ek sawaal poochta hai — "naam kitna milta hai?", "house number alag hai kya?" — aur saare trees milkar match ki probability dete hain. Logistic regression har feature ka sirf ek fixed weight deta hai, jabki trees "agar naam same hai TO house number check karo" jaisa conditional faisla le sakte hain.
+
 ### 2.7 Decision threshold (`src/ber/decision/threshold.py`)
 
 - **Rule:** A candidate is a match if score ≥ threshold. A business with no candidate above the threshold gets an empty list (a predicted singleton).
@@ -181,7 +233,8 @@ There are two matchers; `matcher.type` in the config chooses one.
 | Blocking | No | deterministic keys; settings chosen by measured sweeps |
 | Pair features | No | fixed formulas |
 | Weighted rule (Submission 1) | **No** | hand-set weights |
-| Logistic regression (current best) | **Yes** | 22 weights + intercept, from train-fold S1 pairs |
+| Logistic regression (Submission 2) | **Yes** | 22 weights + intercept, from train-fold S1 pairs |
+| LightGBM (EXP-M-03 candidate) | **Yes** | tree splits and leaf values, from the same train-fold S1 pairs; early stopping and threshold on the inner train-fold split |
 | Threshold | Tuned (one number) | inner train-fold split (current best) |
 | EXP-D-01 probe | Diagnostic only | not part of the pipeline |
 
@@ -200,7 +253,9 @@ There are two matchers; `matcher.type` in the config chooses one.
 | pytest | 78 tests (synthetic data only) | `tests/` | reproducibility | — |
 | psutil | memory measurement | runtime logs, block-eval | machine has 16 GB total | — |
 | PyTorch 2.14 (CUDA) | **not used by the pipeline**; EXP-D-01 diagnostic probe only | `scripts/analysis/matcher_headroom_probe.py` | installed at the team's request | any future production model must be MIT/Apache and ≤8B params |
-| scikit-learn, LightGBM | **not used** | — | LR is implemented in numpy; LightGBM not justified yet | — |
+| LightGBM 4.7.0 (MIT) | tree matcher (EXP-M-03) | `src/ber/models/gbdt.py` | strongest measured scorer; CPU, fast, deterministic with a seed | pinned in `environment.yml` / `requirements.txt` (DEC-016) |
+| SciPy 1.18 | required by LightGBM only | — | dependency | — |
+| scikit-learn | **not used** | — | not needed (LR in numpy, trees in LightGBM) | — |
 
 ---
 
@@ -224,6 +279,8 @@ There are two matchers; `matcher.type` in the config chooses one.
   *Hindi:* Asli match ko na pakad paana.
 - **Logistic regression.** Learns one weight per feature and outputs a probability.
   *Hindi:* Har feature ka weight data se seekh kar 0–1 probability dene wala model.
+- **LightGBM.** Many small decision trees whose answers are added up into a match probability; it can learn "if-then" combinations of features.
+  *Hindi:* Bahut saare chhote decision trees jo milkar "agar-to" wale niyam seekhte hain aur match ki probability dete hain.
 - **Threshold.** The cut-off score for "match".
   *Hindi:* Match maanne ki minimum score seema.
 - **Training vs inference.** Training learns the weights from labelled train data. Inference applies the fixed model to new (test) data.
@@ -244,9 +301,10 @@ There are two matchers; `matcher.type` in the config chooses one.
 - **Why preserve Indic scripts?** Their vowel signs are Unicode "combining marks". Generic accent stripping deletes them and breaks the words.
 - **Why can blocking recall never be recovered by the matcher?** The matcher scores only the shortlist. A pair that isn't in it is never seen.
 - **Candidate generation vs matching?** Generation is cheap, wide and recall-first. Matching is precise and scores each shortlisted pair.
-- **What is trained?** Only the logistic-regression weights and one threshold (current best). Submission 1 had no trained model.
+- **What is trained?** Submission 2: the logistic-regression weights and one threshold. EXP-M-03: the LightGBM trees and one threshold. Normalization, blocking and features are never trained. Submission 1 had no trained model.
 - **Why logistic regression?** It's simple, fast (~2 s to fit), interpretable and measured better than the hand rule (+0.031 on identical candidates). It needs no new dependency.
-- **What would LightGBM add?** Automatic non-linear interactions. It's not used yet because no measurement shows we need them.
+- **What does LightGBM add?** Conditional (if-then) combinations of features. Measured: +0.065 F0.5 over LR on identical candidates, with higher precision (EXP-M-03, dev scale).
+- **Why not embeddings / transformers?** The measured gap was in combining existing features, which a small tabular model fixes cheaply. Embeddings would cost far more memory and add license questions without measured need.
 - **Why does the threshold matter?**
   - Lower: more matches, higher recall, more false merges.
   - Higher: fewer, safer matches.

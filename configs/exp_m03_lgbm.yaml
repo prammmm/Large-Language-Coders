@@ -1,0 +1,46 @@
+# EXP-M-03: LightGBM matcher. ONE change vs EXP-F-01b (Submission 2): scorer LR -> LightGBM.
+# Blocking, features (same 22 inputs), train-fold S1 set, inner-split protocol, frozen
+# validation split and output rules are all identical to EXP-F-01b.
+#   fit      : re-uses the EXP-F-01b train-fold candidate/feature parts read-only
+#              (same 200k train-fold S1, identical pairs) -> scorer-only comparison
+#   evaluate : re-scores the EXP-F-01b validation parts (identical candidates/features)
+#   infer    : scores test with the SAME blocking/features, writes its own parts
+inherit: exp_f01b_conflicts_zeros.yaml
+
+experiment:
+  id: EXP-M-03
+
+scoring:
+  tag: scored_EXP-M-03                   # test parts written by `infer`
+  eval_source_tag: scored_EXP-F-01b      # validation parts read by `evaluate`
+
+matcher:
+  type: lightgbm
+
+fit:
+  max_train_s1: 200000                   # same seeded train-fold S1 set as EXP-F-01b
+  reuse_fit_parts: scored_EXP-F-01b_fit  # read-only; the S1 set is verified in code
+  dev_subsample_s1: null                 # e.g. 50000 for a quick run
+
+lightgbm:                                # small, conservative, CPU, deterministic
+  num_boost_round: 1000
+  early_stopping_rounds: 50              # on the inner train-fold split (binary logloss)
+  params:
+    objective: binary
+    learning_rate: 0.05
+    num_leaves: 31
+    max_depth: 8
+    min_data_in_leaf: 100
+    feature_fraction: 0.9
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    lambda_l2: 1.0
+    num_threads: 8
+    seed: 42
+    deterministic: true
+    force_row_wise: true
+    verbosity: -1
+
+decision:
+  threshold_from: model                  # tuned on the inner train-fold split during `fit`
+  threshold: 0.5                         # fallback only

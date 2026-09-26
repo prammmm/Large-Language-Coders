@@ -391,28 +391,68 @@ def run_block_eval(cfg: dict, paths: Paths) -> dict:
 
 # ----------------------------------------------------------------------------- fit (learned matcher)
 def run_fit(cfg: dict, paths: Paths) -> dict:
-    """Fit the logistic matcher on TRAIN-fold S1s only; tune its threshold on an inner
-    train-fold split (seeded hash of the S1 id). Validation S1s are never touched."""
+    """Fit the learned matcher (``matcher.type``: logistic | lightgbm) on TRAIN-fold S1s only.
+
+    * candidates/features come from `score_split` on the fit S1s, or are re-used read-only
+      from another experiment's fit parts (``fit.reuse_fit_parts``) -- then the S1 set is
+      checked to be exactly inside the configured fit set;
+    * the inner split (seeded hash of the S1 id) is used for the threshold (both models) and
+      for LightGBM early stopping. Validation S1s are never touched (checked, raises)."""
     exp = cfg["experiment"]["id"]
     fcfg = cfg["fit"]
+    kind = cfg["matcher"].get("type", "logistic")
     names = list(cfg["matcher"]["features"])
     fit_ids = fit_s1_subset(cfg, paths)
-    LOG.info("fit on %d train-fold S1 (validation excluded)", len(fit_ids))
-    out_dir = scored_dir(cfg, paths, "train", "fit")
-    rule = make_scorer(cfg, paths, kind="weighted_rule")  # placeholder score; features are what matter
-    with stage("fit: block + features on train-fold S1"):
-        sstats = score_split(cfg, paths, "train", fit_ids, out_dir, rule, store_features=True)
+    reuse = fcfg.get("reuse_fit_parts")
+    if reuse:
+        out_dir = paths.scored_dir("train", reuse)
+        if not any(out_dir.glob("*.parquet")):
+            raise FileNotFoundError(f"fit.reuse_fit_parts: no parts in {out_dir}")
+        sstats = {"reused_parts": str(out_dir)}
+        LOG.info("fit: re-using train-fold candidates/features from %s (read-only)", out_dir)
+    else:
+        out_dir = scored_dir(cfg, paths, "train", "fit")
+        rule = make_scorer(cfg, paths, kind="weighted_rule")  # placeholder score; features are what matter
+        with stage("fit: block + features on train-fold S1"):
+            sstats = score_split(cfg, paths, "train", fit_ids, out_dir, rule, store_features=True)
     need = sorted(set(sum([n.split("*") for n in names], [])))
-    cols = ["s1_row", "pool_row"] + need
-    d = _read_parts(out_dir, cols)
+    d = _read_parts(out_dir, ["s1_row", "pool_row"] + need)
+
+    # ---- leakage / consistency guards on the actual training rows
+    row_ids = _ids(paths, "train", "source1").take(pa.array(d["s1_row"].astype(np.int64)))
+    if pc.any(pc.is_in(row_ids, value_set=pa.array(load_val_ids(paths), pa.string()))).as_py():
+        raise RuntimeError("leakage: validation S1 present in the fit candidate parts")
+    in_fit = pc.is_in(row_ids, value_set=pa.array(fit_ids, pa.string())).to_numpy(zero_copy_only=False)
+    if not in_fit.all():
+        raise RuntimeError(f"fit parts contain {int((~in_fit).sum())} pairs of S1 outside the configured fit set")
+    dev_n = fcfg.get("dev_subsample_s1")
+    if dev_n and int(dev_n) < len(fit_ids):  # optional quick run: seeded subset of the fit S1s
+        rng = np.random.default_rng(cfg["seed"] + 2)
+        fit_ids = sorted(np.asarray(fit_ids, dtype=object)[rng.choice(len(fit_ids), int(dev_n), replace=False)].tolist())
+        keep = pc.is_in(row_ids, value_set=pa.array(fit_ids, pa.string())).to_numpy(zero_copy_only=False)
+        d = {k: v[keep] for k, v in d.items()}
+        LOG.info("fit: dev subsample of %d train-fold S1 (%d pairs)", len(fit_ids), int(keep.sum()))
+    LOG.info("fit %s on %d train-fold S1 (validation excluded)", kind, len(fit_ids))
+
     is_true, pos, n_true, _ = label_pairs(paths, fit_ids, d["s1_row"], d["pool_row"])
     tune_frac = float(fcfg.get("inner_tune_fraction", 0.2))
     ent_tune = np.array([_hash_frac(cfg["seed"], s) < tune_frac for s in fit_ids])
     pair_tune = ent_tune[pos]
     X = feature_matrix(d, names)
-    with stage("fit: logistic regression"):
-        model = LogisticModel(names).fit(X[~pair_tune], is_true[~pair_tune], l2=float(fcfg.get("l2", 1e-4)),
-                                         max_iter=int(fcfg.get("max_iter", 50)))
+    with stage(f"fit: {kind}"):
+        if kind == "lightgbm":
+            from ber.models.gbdt import LightGBMModel
+
+            lcfg = cfg.get("lightgbm", {}) or {}
+            model = LightGBMModel(names, lcfg.get("params")).fit(
+                X[~pair_tune], is_true[~pair_tune], X[pair_tune], is_true[pair_tune],
+                num_boost_round=int(lcfg.get("num_boost_round", 1000)),
+                early_stopping_rounds=int(lcfg.get("early_stopping_rounds", 50)))
+            solver = "LightGBM gbdt, binary logloss; early stopping + threshold on the inner train-fold split"
+        else:
+            model = LogisticModel(names).fit(X[~pair_tune], is_true[~pair_tune], l2=float(fcfg.get("l2", 1e-4)),
+                                             max_iter=int(fcfg.get("max_iter", 50)))
+            solver = "Newton-IRLS (numpy), standardised features, L2 on weights, no class weights"
     # threshold on the inner train-fold tune split (entity-level F0.5)
     tpos = np.flatnonzero(ent_tune)
     remap = -np.ones(len(fit_ids), np.int64)
@@ -425,14 +465,14 @@ def run_fit(cfg: dict, paths: Paths) -> dict:
         "inner_tune": {k2: best[k2] for k2 in ("f05", "macro_precision", "macro_recall", "singleton_false_positive", "predicted_per_s1")},
         "fit_s1": len(fit_ids), "inner_tune_s1": int(ent_tune.sum()), "seed": cfg["seed"],
         "config": cfg.get("_config_path"), "blocking": cfg["blocking"], "features_options": feature_options(cfg),
-        "solver": "Newton-IRLS (numpy), standardised features, L2 on weights, no class weights",
+        "solver": solver, "training_parts": str(out_dir),
     })
     model.save(model_path(cfg, paths))
-    LOG.info("FIT %s: %d pairs (%d positive) | inner-tune threshold %.2f F0.5 %.4f P %.4f R %.4f | %.1fs",
-             exp, model.meta["n_train_pairs"], model.meta["positives"], best["threshold"], best["f05"],
+    LOG.info("FIT %s [%s]: %d pairs (%d positive) | inner-tune threshold %.2f F0.5 %.4f P %.4f R %.4f | %.1fs",
+             exp, kind, model.meta["n_train_pairs"], model.meta["positives"], best["threshold"], best["f05"],
              best["macro_precision"], best["macro_recall"], model.meta["fit_seconds"])
-    write_json(paths.run_dir(exp) / "fit_report.json", {"model": model.to_dict(), "scoring_stats": sstats,
-                                                       "inner_tune_sweep": sweep})
+    saved = __import__("json").loads(model_path(cfg, paths).read_text(encoding="utf-8"))
+    write_json(paths.run_dir(exp) / "fit_report.json", {"model": saved, "scoring_stats": sstats, "inner_tune_sweep": sweep})
     return model.meta
 
 
@@ -618,7 +658,7 @@ def main(argv=None) -> int:
         run_split(cfg, paths, a.force)
     if a.stage == "block-eval":
         run_block_eval(cfg, paths)
-    if a.stage == "fit" or (a.stage == "all" and cfg["matcher"].get("type") == "logistic"):
+    if a.stage == "fit" or (a.stage == "all" and cfg["matcher"].get("type") in ("logistic", "lightgbm")):
         run_fit(cfg, paths)
     if a.stage in ("train", "all"):
         run_train(cfg, paths)

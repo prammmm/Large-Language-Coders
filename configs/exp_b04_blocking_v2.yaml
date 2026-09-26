@@ -1,0 +1,41 @@
+# EXP-B-04: Blocking V2 + LightGBM RETRAINED on candidates from this blocker.
+# Change vs EXP-M-03 (control): two new blocking passes (selected from the blocking-only sweep
+# experiments/runs/EXP-B-04/blocking_sweep.md: variant D = A + B + C, top_k 20).
+# Unchanged: normalization, the 22 inputs, LightGBM hyper-parameters, the seeded 200k train-fold
+# S1 set, the inner train-fold split (early stopping + threshold), frozen validation split.
+# NOT unchanged by design: the train-fold candidates are re-generated with THIS blocker
+# (no reuse of EXP-M-03 parts), because cheap_score / cheap_rank depend on the blocker.
+inherit: exp_m03_lgbm.yaml
+
+experiment:
+  id: EXP-B-04
+
+blocking:
+  top_k: 20
+  passes:
+    name_addr:                 # (B) rarest name_core tokens x rarest useful address words
+      enabled: true
+      max_name_tokens: 2       # per record: 2 rarest name tokens present in the pool
+      max_words: 3             # per record: 3 rarest useful address words present in the pool
+      word_max_df: 500000      # same "useful word" ceiling as addr_num_word
+      max_block_size: 50       # same block cap as the other keys
+      weight: 1.0
+    addr_pair:                 # (C) unordered pairs of the record's rarest useful address words
+      enabled: true
+      max_words: 3             # 3 words -> up to 3 pairs per record
+      word_max_df: 500000
+      max_block_size: 50
+      weight: 1.0
+
+scoring:
+  tag: scored_EXP-B-04         # validation (`train`) and test (`infer`) parts of this blocker
+  eval_source_tag: null
+
+matcher:
+  type: lightgbm
+  model_path: null             # own model: experiments/runs/EXP-B-04/model.json
+
+fit:
+  max_train_s1: 200000         # same seeded train-fold S1 set as EXP-M-03 (validation excluded)
+  reuse_fit_parts: null        # MUST re-block the train-fold S1 with this blocker
+  dev_subsample_s1: null

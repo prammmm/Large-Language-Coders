@@ -7,6 +7,8 @@ Passes (each can be switched on/off and capped in the config):
     name_token      key = name_core token with pool DF <= max_df    (off in v0; EXP-B-02 D)
     exact_core      key = name_core (legal forms removed)            (EXP-B-02 A)
     sorted_core     key = sorted name_core tokens                     (EXP-B-02 B)
+    name_addr       key = (rarest name_core token, rarest useful address word) (EXP-B-04 B)
+    addr_pair       key = unordered pair of the record's rarest useful address words (EXP-B-04 C)
   option strip_leading_zeros: "04126" == "4126" for address-number keys (EXP-B-02 C)
 
 Mechanics (all numpy/pyarrow, no Python loops over records):
@@ -31,7 +33,7 @@ import pyarrow.compute as pc
 
 from ber.normalization.views import ADDRESS_STOPWORDS
 
-PASS_ORDER = ("exact_name", "addr_num_word", "addr_rare_word", "name_token", "exact_core", "sorted_core")
+PASS_ORDER = ("exact_name", "addr_num_word", "addr_rare_word", "name_token", "exact_core", "sorted_core", "name_addr", "addr_pair")
 
 _LEADING_ZEROS = r"(^|\s)0+(\d)"
 
@@ -155,6 +157,34 @@ def rarest_per_record(rec, tok, df, limit: int):
     return rec[keep], tok[keep]
 
 
+def cross_keys(a_rec, a_tok, a_df, a_lim, b_rec, b_tok, b_df, b_lim, vocab_b, window, same=False):
+    """Per record: the ``a_lim`` rarest tokens of list A x the ``b_lim`` rarest of list B.
+
+    ``same=True`` (A and B are the same list): unordered pairs of distinct tokens only,
+    key = min_id * vocab + max_id. Computed in record windows (bounded temporaries).
+    Inputs must be sorted by record (``encode_columns`` guarantees it)."""
+    total = int(max(a_rec[-1] if len(a_rec) else -1, b_rec[-1] if len(b_rec) else -1)) + 1
+    out_rec, out_key = [], []
+    for lo in range(0, total, window):
+        hi = lo + window
+        a0, a1 = np.searchsorted(a_rec, [lo, hi])
+        b0, b1 = np.searchsorted(b_rec, [lo, hi])
+        if a0 == a1 or b0 == b1:
+            continue
+        ar, at = rarest_per_record(a_rec[a0:a1], a_tok[a0:a1], a_df, a_lim)
+        br, bt = (ar, at) if same else rarest_per_record(b_rec[b0:b1], b_tok[b0:b1], b_df, b_lim)
+        r, k = cross_within_records(ar, at, br, bt, vocab_b)
+        if same:
+            x, y = k // vocab_b, k % vocab_b
+            keep = x < y
+            r, k = r[keep], k[keep]
+        out_rec.append(r)
+        out_key.append(k)
+    if not out_rec:
+        return np.zeros(0, np.int32), np.zeros(0, np.int64)
+    return np.concatenate(out_rec), np.concatenate(out_key)
+
+
 def num_word_keys(n_rec, n_tok, n_df, w_rec, w_tok, w_df, word_ok, max_nums, max_words, vocab_w, window):
     """(numeric token, useful word) keys per record, computed in record windows so the
     lexsort / cross-product temporaries never cover the whole partition.
@@ -249,7 +279,7 @@ class CountryBlocker:
             self._add_pass("sorted_core", list(encode("name_core", split=False, transform=sort_tokens)[:2]), pcfg["sorted_core"])
 
         # --- Block B: address tokens
-        need_words = any(pcfg.get(p, {}).get("enabled", False) for p in ("addr_num_word", "addr_rare_word"))
+        need_words = any(pcfg.get(p, {}).get("enabled", False) for p in ("addr_num_word", "addr_rare_word", "name_addr", "addr_pair"))
         if need_words:
             w_rec, w_tok, w_vocab = encode("addr_words", split=True)
             V = len(w_vocab)
@@ -263,6 +293,28 @@ class CountryBlocker:
                 sel = useful[w_tok] & (w_df[w_tok] <= c["max_df"])
                 self._add_pass("addr_rare_word", [w_rec[sel], w_tok[sel]], c)
                 del sel
+
+            # --- EXP-B-04 (C): pairs of the record's rarest useful address words
+            c = pcfg.get("addr_pair", {})
+            if c.get("enabled", False):
+                # only words present in the pool can ever match: never spend a slot on DF-0 words
+                sel = useful[w_tok] & (w_df[w_tok] >= 1) & (w_df[w_tok] <= c["word_max_df"])
+                keys = list(cross_keys(w_rec[sel], w_tok[sel], w_df, c["max_words"], w_rec[sel], w_tok[sel], w_df,
+                                       c["max_words"], max(V, 1), chunk_rows, same=True))
+                del sel
+                self._add_pass("addr_pair", keys, c)
+
+            # --- EXP-B-04 (B): (rarest name_core token) x (rarest useful address word)
+            c = pcfg.get("name_addr", {})
+            if c.get("enabled", False):
+                t_rec, t_tok, t_vocab = encode("name_core", split=True)
+                t_df = np.bincount(t_tok[t_rec >= self.n_s1], minlength=len(t_vocab))
+                tsel = (t_df[t_tok] >= 1) & (t_df[t_tok] <= c.get("name_max_df", 10**12))
+                wsel = useful[w_tok] & (w_df[w_tok] >= 1) & (w_df[w_tok] <= c["word_max_df"])
+                keys = list(cross_keys(t_rec[tsel], t_tok[tsel], t_df, c["max_name_tokens"], w_rec[wsel], w_tok[wsel], w_df,
+                                       c["max_words"], max(V, 1), chunk_rows))
+                del t_rec, t_tok, tsel, wsel
+                self._add_pass("name_addr", keys, c)
 
             c = pcfg.get("addr_num_word", {})
             if c.get("enabled", False):

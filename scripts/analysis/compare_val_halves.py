@@ -15,6 +15,7 @@ import numpy as np
 
 from ber.config import Paths, load_config
 from ber.evaluation.metrics import evaluate_arrays
+from ber.models.gbdt import LightGBMModel
 from ber.models.logistic import LogisticModel
 from ber.pipeline.run_baseline import _read_parts, label_pairs
 from ber.data.split import load_val_ids
@@ -25,6 +26,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/baseline_v0.yaml")
     ap.add_argument("--runs", nargs="+", required=True, help="RUN_ID:scored_tag (threshold read from the run's metrics.json)")
+    ap.add_argument("--out", default="experiments/runs/val_halves_comparison.json")
     a = ap.parse_args()
     configure_arrow()
     paths = Paths(load_config(a.config))
@@ -35,7 +37,10 @@ def main():
         run, tag = spec.split(":")
         t = json.loads((paths.run_dir(run) / "metrics.json").read_text(encoding="utf-8"))["threshold_used"]
         mfile = paths.run_dir(run) / "model.json"
-        model = LogisticModel.load(mfile) if mfile.exists() else None
+        model = None
+        if mfile.exists():
+            kind = json.loads(mfile.read_text(encoding="utf-8")).get("type")
+            model = LightGBMModel.load(mfile) if kind == "lightgbm" else LogisticModel.load(mfile)
         cols = ["s1_row", "pool_row", "score"] + ([c for c in model.required_features if c != "score"] if model else [])
         d = _read_parts(paths.scored_dir("train", tag), list(dict.fromkeys(cols)))
         # stored "score" may come from another matcher (evaluate re-scores in memory): re-score with the run's model
@@ -53,7 +58,7 @@ def main():
         out[run] = {"threshold": t, **res}
         print(run, "t=%.2f" % t, {h: round(v["f05"], 4) for h, v in res.items() if h.startswith("half")},
               {h: round(v["macro_precision"], 4) for h, v in res.items() if h.startswith("half")})
-    write_json(Path("experiments/runs/val_halves_comparison.json"), out)
+    write_json(Path(a.out), out)
 
 
 if __name__ == "__main__":

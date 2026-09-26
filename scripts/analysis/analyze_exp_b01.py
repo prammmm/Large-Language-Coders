@@ -142,6 +142,7 @@ def main() -> None:
     else:
         t_best = float(read_json(paths.run_dir(exp) / "tuned_threshold.json")["threshold"])
     tag = cfg.get("scoring", {}).get("eval_source_tag") or cfg.get("scoring", {}).get("tag", "scored")
+    test_tag = cfg.get("scoring", {}).get("tag", "scored")  # this experiment's own test parts
     rng = random.Random(cfg["seed"])
     R: dict = {"experiment": exp, "threshold": t_best}
 
@@ -186,6 +187,13 @@ def main() -> None:
         s1r = sc.column("s1_row").to_numpy().astype(np.int64)
         plr = sc.column("pool_row").to_numpy().astype(np.int64)
         score = sc.column("score").to_numpy()
+        if cfg["matcher"].get("type", "weighted_rule") != "weighted_rule":
+            # validation parts may be another experiment's (eval_source_tag): re-score with THIS model
+            from ber.models import make_scorer
+
+            _scorer = make_scorer(cfg, paths)
+            _d = {c: sc.column(c).to_numpy() for c in sc.column_names}
+            score = _scorer.score(_d)
         rank = sc.column("cheap_rank").to_numpy().astype(np.int64)
         feats = {c: sc.column(c).to_numpy() for c in sc.column_names if c not in ("s1_row", "pool_row", "score", "cheap_rank", "cheap_score", "pass_flags")}
         flags = sc.column("pass_flags").to_numpy()
@@ -408,7 +416,7 @@ def main() -> None:
 
     # ---------------- 5. test behaviour by country vs validation
     with stage("test diagnostics"):
-        tparts = sorted(paths.scored_dir("test", tag).glob("*.parquet"))
+        tparts = sorted(paths.scored_dir("test", test_tag).glob("*.parquet"))
     if not tparts:  # no test inference for this experiment yet -> skip (never mix experiments)
         R["test_by_country"] = "not available (no test parts for this experiment)"
     else:

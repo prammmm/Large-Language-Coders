@@ -213,3 +213,162 @@ Improve on Submission 1 (validation 0.7851, LB 0.751) with controlled, measured,
 
 ### Current state
 EXP-F-01b is the best measured system (dev-scale fit). The team runs the full fit/train/infer/submit.
+
+---
+
+## 2026-09-25 — Submission 2 result + deep analysis (Claude Code)
+
+### Objective
+Explain LB 0.815 and find where the score is still lost.
+
+### Work completed
+- Collected the team's full EXP-F-01b run (validation 0.8372, LB 0.815).
+- Ran:
+  - `analyze_exp_b01.py` on EXP-F-01b;
+  - a new `scripts/analysis/error_budget.py` (oracle-fix gain per error bucket);
+  - a new `scripts/analysis/nonlinear_probe.py` (EXP-D-02: MLP on the same features and protocol, 3 seeds).
+- Wrote `reports/EXP-F-01b_SUBMISSION_2_REPORT.md`.
+
+### Key findings
+- LB gap explained by country mix (India+US reweighted 0.823; France estimated ≈0.77).
+- Error budget: blocking misses +0.073, low-scored true candidates +0.058, false merges +0.046.
+- **Non-linear scorer +0.050 (0.887–0.890), with precision up and false merges halved.**
+
+### Files
+- Created: the report and the two analysis scripts.
+- Modified: `nonlinear_probe.py` (seed/out args), EXPERIMENT_LOG, this log.
+- Nothing committed.
+
+---
+
+## 2026-09-25 — Phase 3: EXP-M-03 LightGBM matcher (Claude Code)
+
+### Objective
+Test one hypothesis: a production-safe non-linear scorer extracts the headroom found by the MLP probe. The change is scorer-only.
+
+### Work completed
+- Env: installed `lightgbm=4.7.0` (conda-forge CPU, MIT) plus its dependency `scipy` 1.18.1 into the existing `ber_hackathon` env with `--freeze-installed`. No other package changed (`pip check` clean). Pinned in `environment.yml` / `requirements.txt` (DEC-016).
+- Code:
+  - `src/ber/models/gbdt.py` (LightGBMModel: fit with early stopping, save/load, gain importance);
+  - `models/__init__.py` (`lightgbm` type);
+  - `run_fit` generalised: `fit.reuse_fit_parts` (read-only re-use of another experiment's train-fold parts, with the S1-set check), `fit.dev_subsample_s1`, a leakage guard on the actual training rows, and a LightGBM branch;
+  - `all` stage includes lightgbm.
+- Config: `configs/exp_m03_lgbm.yaml`. Tests: `tests/test_lightgbm.py` (5 tests). Total 83 passing.
+- Scripts: `scripts/analysis/test_country_profile.py` (France guard); `compare_val_halves.py` loads LightGBM too.
+- Dev-scale measurement: 50k train-fold S1 subsample; full frozen validation. LR on the same 50k: 0.8375. LightGBM seeds 42/7/123: 0.9021/0.9022/0.9021, precision 0.976–0.979. France sample guard: LightGBM predicts more in France (0.19 vs 0.13 per S1).
+- Docs: EXPERIMENT_LOG (EXP-M-03), DECISION_LOG (DEC-016), `docs/MODEL_AND_PIPELINE_EXPLAINED.md` (LightGBM section), README.
+
+### Current state
+EXP-M-03 is a strong candidate. The team runs the full 200k fit/evaluate/infer, then the France guard, then decides on the submission. Nothing committed.
+
+---
+
+## 2026-09-25 — Submission 3 result + deep analysis (Claude Code)
+
+### Objective
+Explain LB 0.889 (EXP-M-03) and find what still blocks the score.
+
+### Work completed
+- `analyze_exp_b01.py` now re-scores with the experiment's own model when it reads another experiment's validation parts, and uses the experiment's own test parts. (Before, it would have analysed the LR score for EXP-M-03.)
+- Ran on the full EXP-M-03 run: analysis, error budget, a new France pattern probe (`scripts/analysis/france_pattern_probe.py`, hypothesis rejected), a new test-conflict lower bound (`scripts/analysis/test_conflicts.py`), and the capacity probe EXP-D-03.
+- Wrote `reports/EXP-M-03_SUBMISSION_3_REPORT.md`; updated EXPERIMENT_LOG.
+
+### Key findings
+- The scorer is near its ceiling (gap 0.038). Blocking is ≈57% of the remaining loss.
+- On test, France has ≥ 6.2% certainly-wrong predictions from conflicting claims (LR 2.3%), invisible on validation.
+- Capacity and threshold are not levers.
+
+### Current state
+Waiting for the team's decision on the next experiment (EXP-B-03 blocking recall / EXP-X-01 full-competition conflict resolution / EXP-N-01). Nothing committed.
+
+---
+
+## 2026-09-25 — Phase 4: EXP-B-03a name-token blocking (Claude Code)
+
+### Objective
+Test one change: enable the existing name-token blocking pass, with the Submission-3 LightGBM model kept fixed.
+
+### Work completed
+- Inspected the existing `name_token` pass (name_core tokens with pool DF ≤ max_df; max_df also caps block size), the M-03 config and the model. No code change was needed for the pass itself.
+- Config `configs/exp_b03a_name_token.yaml`:
+  - inherits EXP-M-03;
+  - name_token enabled;
+  - `matcher.model_path` = the EXP-M-03 model (fixed);
+  - new tag for re-blocked validation/test parts.
+- Measured on the frozen validation split: block-eval + train (re-block + fixed-model scoring). F0.5 0.9027 vs 0.9037 → **rejected**.
+- New analysis script `scripts/analysis/compare_candidate_sets.py`: new-only / displaced / flipped pairs, recovered-TP and new-FP profiles, counterfactual F0.5.
+- Tests: `tests/test_name_token.py` (4 tests). 87 passing.
+- Logs and `docs/MODEL_AND_PIPELINE_EXPLAINED.md` updated. No dependency change. Nothing committed. No test inference run.
+
+### Key finding
+The name-token candidates are safe (3,932 TP vs 182 FP accepted). The regression comes from the fixed model reacting to changed `cheap_score` / `cheap_rank` inputs on existing candidates (+3,994 FP flips). Candidate recovery alone is worth +0.0020.
+
+---
+
+## 2026-09-25 — Submission 4 (EXP-B-03a check, LB 0.890) report (Claude Code)
+- Test-side diagnostics for EXP-B-03a vs EXP-M-03 (country profile, conflict lower bound). `test_country_profile.py` / `test_conflicts.py` now follow a run's recorded `model_path`.
+- New `scripts/analysis/blocking_gap_probe.py`: 78.1% of missing true pairs are reachable by combined key families; only 19.7% by rare name tokens.
+- Wrote `reports/EXP-B-03a_SUBMISSION_4_REPORT.md` (cumulative work + analysis and priorities). No pipeline changes. Nothing committed.
+
+---
+
+## 2026-09-25 — Phase 5 Stage A: EXP-B-04 Blocking V2 + retrained LightGBM (Claude Code)
+
+### Objective
+Test the largest measured blocking opportunity: combined keys, with the model retrained on the same blocker. Implement → self-test → block-eval → retrain → validate → analyse → report, then STOP for human review.
+
+### Work completed
+- Code (`src/ber/blocking/blocker.py`):
+  - new `cross_keys` helper (windowed per-record cross products; unordered pairs for `same=True`);
+  - new passes `name_addr` and `addr_pair` (PASS_ORDER now 8 passes, which fits the uint8 flags);
+  - both select only words with pool DF ≥ 1 (a bug found by a new test: DF-0 words wasted key slots);
+  - existing passes are unchanged.
+- `scripts/experiments/run_blocking_sweep.py`: `--prefix`; custom variants-only runs.
+- Config: `configs/exp_b04_blocking_v2.yaml` (inherits EXP-M-03; new passes; own tag; no fit-part reuse; own model).
+- Tests: `tests/test_blocking_v2.py` (8 new). 95 passing.
+- Measurements:
+  - 2% sample check;
+  - blocking-only sweep A/B/C/D on the frozen validation split;
+  - retrain + validation for D at K=20 (EXP-B-04) and K=30 (EXP-B-04-k30);
+  - halves, pairwise attribution, recovered-by-key, error budget, 2% sample unlabeled test diagnostics.
+- Docs: EXPERIMENT_LOG (EXP-B-04), DECISION_LOG (DEC-017, Proposed), `docs/MODEL_AND_PIPELINE_EXPLAINED.md` (Blocking V2 + retraining, English/Hindi).
+
+### Result
+Validation F0.5 0.9274 (+0.0237), precision 0.9774, halves 0.9271 / 0.9277. **Status: READY FOR HUMAN REVIEW.**
+
+### Not done (by instruction)
+No full test inference, no submission, `output/` untouched, nothing committed. No dependency change.
+
+---
+
+## 2026-09-26 — POST-0.91 forensic analysis after Submission 5 (Claude Code, analysis only)
+
+### Objective
+Explain the ≈0.91 leaderboard score of EXP-B-04 (val 0.9274), build a complete error budget, and pick exactly one next experiment. No production, model, blocker, threshold, feature or `output/` changes. No submission.
+
+### Work completed
+- New read-only scripts in `scripts/analysis/`:
+  - `full_competition.py`: scores all 2.2M train S1s so they compete as on test;
+  - `blocking_forensics.py`: uncapped recall@K, fate of true pairs, miss causes, new key-family coverage;
+  - `scorer_test_forensics.py`: calibration, cardinality, false-merge categories, test/France label-free stats;
+  - `distribution_shift.py`.
+- Forensic learning-curve point `FORENSIC-B04-dev50k`: re-uses the B-04 fit parts read-only, own run dir.
+- Report: `experiments/runs/POST-0.91-FORENSIC/REPORT.md`, 17 sections plus an English + Hindi team explanation. `experiments/runs/` is gitignored.
+
+### Key measured results
+- **Full competition:** with all train S1s competing, a best-claimant-per-pool-record rule (margin 0) raises F0.5 on 2.0M out-of-sample S1s from 0.9273 to **0.9313**. P 0.9775 → 0.9840, R −0.0014, India +0.0060, US +0.0027. The earlier "exclusivity ≤ 0.0005" result is obsolete, because it was measured with only 10% of S1s competing.
+- **LB gap:** about −0.008 of the −0.017 gap is country mix, since India is 46.8% of test S1s vs 40.0% of validation. Implied France F0.5 is ≈0.85 [estimate].
+- **Blocking:**
+  - uncapped recall is 0.945 at K = 200 (India 0.910, US 0.968);
+  - 5.5% of true pairs are never retrieved, and 1.8% are lost to the top-K cut;
+  - India misses: mostly outside the rarest-3 word selection, plus script mismatch;
+  - US misses: name-only records with empty addresses.
+- **Scorer and data:** the scorer is well calibrated. 50k → 200k fit S1s gives only +0.0020. Test India/US label-free distributions match validation. The test pool is denser (5.8 vs 4.7 pool records per S1).
+
+### Recommendation (not implemented)
+EXP-D-01: best-claimant conflict resolution at inference. It needs no retraining and no blocker change. Awaiting human approval.
+
+### Notes
+- `src/ber/models/` is still untracked in git; the team must commit it.
+- New derived data: `data/processed/train/forensic_alltrain_B04/` (42.5M scored pairs, can be deleted).
+- Nothing committed; no dependency change.
