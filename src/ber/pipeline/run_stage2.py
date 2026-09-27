@@ -33,6 +33,7 @@ from ber.config import Paths, load_config, parse_sets
 from ber.data.normalize_records import load_manifest, read_country
 from ber.data.split import load_val_ids, match_counts
 from ber.decision.competition import best_claimant_keep, claim_stats
+from ber.decision.ef_prune import expected_f_prune
 from ber.decision.stage2 import VIEW_COLUMNS, context_features, feature_names, peer_features, peer_index, restrict_additions
 from ber.evaluation.metrics import evaluate_arrays
 from ber.normalization.crossscript import XlitMap
@@ -80,7 +81,8 @@ def decision_record(cfg, paths, meta) -> dict:
     f = add_floor(cfg)
     return {"variant": meta["variant"], "threshold": meta["threshold"], "add_floor": None if f is None else ("inf" if np.isinf(f) else f),
             "model_dir": model_dir(cfg, paths).as_posix(), "features_from": s2cfg(cfg).get("features_from") or cfg["experiment"]["id"],
-            "control": f"stage-1 threshold {stage1_threshold(cfg)} + D-01 (full competition)"}
+            "control": f"stage-1 threshold {stage1_threshold(cfg)} + D-01 (full competition)",
+            "ef_prune": bool(s2cfg(cfg).get("ef_prune", False))}
 
 
 def stage1_parts(cfg, paths, split) -> Path:
@@ -277,7 +279,10 @@ def final_decisions(cfg, s1, pool, prob, sc, meta, control_codes=None):
     code = s1 * SHIFT + pool
     if not np.isin(control_codes, code).all():  # the control only accepts pairs with score >= t1 >= min_score
         raise RuntimeError("a control-accepted pair is missing from the stage-2 eligible pairs")
-    return restrict_additions(np.isin(code, control_codes), acc, sc, f)
+    fin = restrict_additions(np.isin(code, control_codes), acc, sc, f)
+    if s2cfg(cfg).get("ef_prune", False):  # EXP-D-04: removal-only per-S1 expected-F0.5 pruning (keep subset of fin)
+        fin = expected_f_prune(s1, pool, prob, fin)
+    return fin
 
 
 # ----------------------------------------------------------------------------- fit / predict

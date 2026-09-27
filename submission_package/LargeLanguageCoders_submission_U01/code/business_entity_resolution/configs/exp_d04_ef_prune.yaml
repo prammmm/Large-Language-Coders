@@ -1,0 +1,16 @@
+# EXP-D-04: removal-only per-S1 expected-F0.5 pruning on top of EXP-S-03 (the leaderboard metric is a per-S1 macro F0.5).
+# ONE change vs the control (S-03): stage2.ef_prune true. Every S1 keeps the prefix (by stage-2 probability) of its S-03
+# accepted pairs with the highest exact expected F0.5 (src/ber/decision/ef_prune.py). Parameter-free; never adds a pair.
+# S-03 stage-2 model and features re-used read-only; no retraining. Outputs only under experiments/runs/EXP-D-04/.
+inherit: exp_s03_veto_on_b09.yaml
+
+experiment:
+  id: EXP-D-04
+
+paths:
+  output_dir: experiments/runs/EXP-D-04/output
+
+stage2:
+  model_from: EXP-S-03
+  features_from: EXP-S-03
+  ef_prune: true

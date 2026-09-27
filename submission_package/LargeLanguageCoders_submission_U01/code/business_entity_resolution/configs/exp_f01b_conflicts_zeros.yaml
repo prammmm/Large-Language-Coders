@@ -1,0 +1,12 @@
+# EXP-F-01b: EXP-F-01a + address-number features compared after leading-zero stripping
+# (addr_num_jaccard / addr_num_shared / num_conflict). ONE change vs EXP-F-01a.
+inherit: exp_f01_conflicts.yaml
+
+experiment:
+  id: EXP-F-01b
+
+features:
+  strip_leading_zeros: true
+
+scoring:
+  tag: scored_EXP-F-01b

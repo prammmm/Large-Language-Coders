@@ -1,0 +1,9 @@
+# Python 3.13 (tested 3.13.15, Windows 11). CPU only; no GPU, no pretrained models, no external data.
+numpy==2.2.4
+pandas==2.3.3
+pyarrow==21.0.0
+rapidfuzz==3.14.6
+lightgbm==4.7.0
+PyYAML==6.0.3
+psutil==7.2.2
+pytest  # optional: unit tests

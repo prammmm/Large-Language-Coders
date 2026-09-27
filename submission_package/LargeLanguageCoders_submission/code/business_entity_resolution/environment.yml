@@ -1,0 +1,26 @@
+# Single Conda environment for the whole project (Submission-1 baseline).
+#   conda env create -f environment.yml
+#   conda activate ber_hackathon
+# Update after edits:  conda env update -f environment.yml --prune
+# Library licenses: numpy/pandas (BSD-3), pyarrow (Apache-2.0), rapidfuzz (MIT),
+# pyyaml (MIT), pytest (MIT), lightgbm (MIT), scipy (BSD-3). No pretrained model weights are used.
+name: ber_hackathon
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.13
+  - pip
+  # numpy: the pip wheel numpy==2.2.4 (OpenBLAS) is used, see the pip section. The conda-forge numpy 2.2.6 MKL build crashed on
+  # BLAS calls (0xc06d007f); every result up to EXP-B-08 was produced with numpy 2.2.4 (EXP-B-09 preflight, 2026-09-27).
+  - pandas=2.3.3
+  - pyarrow=21.0.*
+  - rapidfuzz=3.14.*
+  - pyyaml=6.0.*
+  - pytest=8.4.*
+  - psutil
+  - lightgbm=4.7.0=cpu*   # EXP-M-03 matcher (MIT); pulls scipy
+  - scipy=1.18.*
+  - pip:
+      - numpy==2.2.4    # identical binary to the reference runs (sha256 of _multiarray_umath verified)
+      - -e .            # installs the `ber` package from src/ (editable)

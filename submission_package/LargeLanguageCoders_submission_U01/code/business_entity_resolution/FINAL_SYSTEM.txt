@@ -1,0 +1,4 @@
+Final system: EXP-U-01 = EXP-S-03 (B-09 stage 1 + D-01 + stage-2 veto) PLUS the EXP-S-04 final pairs (B-10 blocker stage 1 @ 0.69 + D-01
+AND its refitted stage-2 veto @ 0.67) on candidates that are NOT in the B-09 top-20 list, for records S-03 does not match.
+Held-out validation F0.5 0.9544 (S-03 0.9536); candidate file = union of the two scored top-20 lists.
+SHA-256 of ../../output/: matching_results.tsv d2cab79f206d..., candidate_pairs.tsv a7e06a6424ec...

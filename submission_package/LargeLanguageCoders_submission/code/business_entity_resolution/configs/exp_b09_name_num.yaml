@@ -1,0 +1,29 @@
+# EXP-B-09: name-view token x house-number blocking key on the EXP-B-06 blocker (FINAL_RESEARCH_AUDIT, experiment 1).
+# ONE change: a new key family `name_num` = the record's 2 rarest pool-present name-view tokens x its 2 rarest pool-present
+# zero-stripped house numbers (the addr_num_word number view), pool block cap 50, weight 1.0 (as the other combination keys).
+# Everything else identical to EXP-B-06 (keys, caps, weights, top-K 20, features, fit set, threshold procedure, D-01).
+# The candidate set and blocker-derived inputs (cheap_score / cheap_rank) change -> stage-1 LightGBM is RETRAINED (DEC-017).
+# Control: EXP-B-06 + D-01 @ 0.67. Never the B-06 model; outputs only under experiments/runs/EXP-B-09/.
+inherit: exp_b06_name_pair.yaml
+
+experiment:
+  id: EXP-B-09
+
+paths:
+  output_dir: experiments/runs/EXP-B-09/output   # never the production output/ folder
+
+blocking:
+  passes:
+    name_num:
+      enabled: true
+      max_name_tokens: 2
+      max_nums: 2
+      max_block_size: 50
+      weight: 1.0
+
+matcher:
+  model_path: null        # -> experiments/runs/EXP-B-09/model.json (this experiment's own fit)
+
+scoring:
+  tag: scored_EXP-B-09    # fit parts: scored_EXP-B-09_fit
+  eval_source_tag: null

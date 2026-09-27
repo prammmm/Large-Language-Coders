@@ -1,0 +1,26 @@
+# EXP-B-07: (exact word-order-insensitive name view) x (useful address word) key, on top of EXP-N-03.
+# ONE change: the disabled exact_core pass slot runs in `with_addr_words` mode. For GENERIC names whose
+# exact-name block exceeds the cap (e.g. "royal ventures"), the (name, city/street word) block is
+# small again (diagnosed: 95.5% of N-03's unreachable cross-script pairs have identical names, 98.6%
+# share an address word). Up to 30 useful words per record (rarest first), block cap 50 as elsewhere.
+# LightGBM retrained (DEC-017). Everything else identical to EXP-N-03 (map, features, D-01, top_k 20).
+inherit: exp_n03_legal_tokens.yaml
+
+experiment:
+  id: EXP-B-07
+
+paths:
+  output_dir: experiments/runs/EXP-B-07/output   # never the production output/ folder
+
+blocking:
+  passes:
+    exact_core:
+      enabled: true
+      with_addr_words: true
+      max_words: 30
+      max_block_size: 50
+      weight: 1.0
+
+scoring:
+  tag: scored_EXP-B-07
+  eval_source_tag: null

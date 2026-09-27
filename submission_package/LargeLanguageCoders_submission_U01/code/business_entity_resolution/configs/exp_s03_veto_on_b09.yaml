@@ -1,0 +1,38 @@
+# EXP-S-03: the S-02 veto architecture REFITTED on EXP-B-09 stage-1 outputs (precision-side consolidation).
+# Stage 1 = EXP-B-09 frozen (blocker incl. name_num, top-K 20, model, threshold 0.65, xlit map, candidates) + D-01.
+# ONE change vs the control (B-09 + D-01): a second-stage LightGBM (S-01 recipe and hyperparameters, unchanged) is fitted on
+# B-09 out-of-sample stage-1 scores (E half A minus validation; inner split for early stopping + threshold) and used as a
+# VETO ONLY: final = (B-09 + D-01) AND stage 2 (add_floor .inf). It can never add a pair.
+inherit: exp_b09_name_num.yaml
+
+experiment:
+  id: EXP-S-03
+  allowed_stages: [submit]      # run_baseline guard: stage 1 is frozen; use ber.pipeline.run_stage2
+
+paths:
+  output_dir: experiments/runs/EXP-S-03/output   # never the production output/ folder
+
+scoring:
+  tag: scored_EXP-B-09          # stage-1 TEST scored parts of B-09 (read-only)
+  eval_source_tag: scored_EXP-B-09
+
+matcher:
+  type: lightgbm
+  model_path: experiments/runs/EXP-B-09/model.json   # frozen B-09 stage-1 model (threshold 0.65 = control)
+
+stage2:
+  stage1_run: EXP-B-09
+  train_tag: forensic_alltrain_B09          # B-09 stage-1 scores of ALL train S1 (full competition; out of sample for E)
+  xlit_map: experiments/runs/EXP-B-09/xlit_map.json
+  min_score: 0.02
+  peers: 3
+  inner_fraction: 0.2
+  chunk_pairs: 1500000
+  workers: 8
+  thresholds: {start: 0.30, stop: 0.90, step: 0.01}
+  lightgbm:
+    num_boost_round: 2000
+    early_stopping_rounds: 50
+    params: {learning_rate: 0.05, num_leaves: 63, min_data_in_leaf: 200, feature_fraction: 0.9,
+             bagging_fraction: 0.8, bagging_freq: 1, lambda_l2: 1.0, seed: 42, num_threads: 8}
+  add_floor: .inf               # veto only

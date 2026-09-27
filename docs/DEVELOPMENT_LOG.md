@@ -608,3 +608,27 @@ No root `output/` write, no submission, no commit or push. No dependency change.
   - Blocking recall@20 0.9584: +0.0015 vs B-09, **-0.0012 vs B-10**. Kill gate KA / KB / KD fail, so it stopped before the retrain.
   - The weight moves 742 of the 1,441 targeted pairs into the top-20, but it pushes out 2,305 address-evidence true pairs (68% share a house number, none name-only). Net -941 true vs B-10.
 - **Nothing committed.** No submission. Root `output/` still holds S-03.
+
+## 2026-09-27 (night) — final 5-hour plan, Option A: EXP-D-04 rejected; final package built (Claude Code)
+
+- **Plan:** `reports/FINAL_5H_PLAN.md`. Public 0.98 (and 0.97) is not reachable in the window; Option A approved.
+- **EXP-D-04:** removal-only per-S1 expected-F0.5 pruning on S-03 (`src/ber/decision/ef_prune.py`, `stage2.ef_prune`; 7 tests; suite 239 / 239).
+  - +0.0001 on validation / GATE-B / E half B, below the +0.001 gate. REJECT; not submitted.
+- **New thin CLI:** `ber.pipeline.score_alltrain` (all-train stage-1 scoring, the stage-2 training input; previously only in an analysis script).
+- **Final package:** `submission_package/LargeLanguageCoders_submission.zip` holds the S-03 output, code, README, requirements, trained models and the filled-in documentation.
+- **Root `output/`:** still S-03 (`46cb8fb5…` / `e6fee476…`). **Nothing committed.**
+
+## 2026-09-27 (night) — EXP-S-04 rejected; S-03 remains final (Claude Code)
+
+- **EXP-S-04:** B-10 blocker + fresh stage-1 fit + fresh S-03-style veto (configs `exp_s04_stage1_b10.yaml` / `exp_s04_veto_on_b10.yaml`; 7 tests; suite 246 / 246).
+  - F0.5 −0.0007 to −0.0008 vs S-03 on validation / GATE-B / E half B, so G1–G3 fail; G4–G8 pass (0 additions).
+  - **Cause:** the inner-split stage-1 threshold rose from 0.65 to 0.69, and about 20k true pairs fell below it, more than the 10k gained by retrieval.
+- Not submitted. Root `output/` = S-03 (verified). **Nothing committed.**
+
+## 2026-09-27 (late) — EXP-U-01 KEEP, ready for human review (Claude Code)
+
+- **Rule:** S-03 plus S-04 acceptances on candidates new to the B-10 blocker.
+- **Result:** +0.0008 on validation / GATE-B / E half B / halves / density-weighted shadow; precision −0.00005.
+- **Test output:** `experiments/runs/EXP-U-01/output/` (+10,307 pairs); official validator PASS; deterministic.
+- **Root `output/`:** unchanged (S-03) pending the team's decision.
+

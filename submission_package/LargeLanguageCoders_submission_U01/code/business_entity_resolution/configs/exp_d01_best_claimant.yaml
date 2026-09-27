@@ -1,0 +1,31 @@
+# EXP-D-01: full-competition best-claimant resolution on top of EXP-B-04 (control).
+# ONLY change: after the global threshold, each S2/S3 record predicted by several test S1 is kept
+# only for the highest-scoring S1 (ties -> lowest S1 row). margin 0, nothing fitted.
+# Unchanged (read-only re-use of EXP-B-04): blocker (top_k 20), normalization, candidates,
+# 22 features, LightGBM model, threshold 0.67 (from the B-04 model's inner train-fold split).
+# No retraining: `fit` / `train` must NOT be run for this experiment. The decision is validated by
+# scripts/experiments/eval_exp_d01.py (all train S1 compete; out-of-sample S1 evaluated).
+# Outputs go to experiments/runs/EXP-D-01/output (the B-04 files in output/ stay untouched).
+inherit: exp_b04_blocking_v2.yaml
+
+experiment:
+  id: EXP-D-01
+  allowed_stages: [submit]     # guard: preprocess/fit/train/infer would touch EXP-B-04 artefacts
+
+paths:
+  output_dir: experiments/runs/EXP-D-01/output
+
+scoring:
+  tag: scored_EXP-B-04         # read-only: EXP-B-04 test/validation scored parts
+  eval_source_tag: scored_EXP-B-04
+
+matcher:
+  type: lightgbm
+  model_path: experiments/runs/EXP-B-04/model.json   # read-only: the EXP-B-04 model + threshold
+
+decision:
+  threshold_from: model
+  competition:
+    enabled: true
+    rule: best_claimant
+    margin: 0.0

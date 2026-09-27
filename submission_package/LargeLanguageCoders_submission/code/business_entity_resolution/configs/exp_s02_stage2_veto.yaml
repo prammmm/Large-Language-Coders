@@ -1,0 +1,17 @@
+# EXP-S-02: stage 2 as a VETO on the control (POST-S01-FORENSIC, section 11).
+# ONE change vs EXP-S-01: S-01 may only REMOVE pairs accepted by the control (EXP-B-06 + D-01 @ 0.67);
+# it may never ADD a pair the control rejected: final = control AND S-01.
+# No retraining (stage 1 and stage 2 frozen), same candidates, same features, same S-01 threshold (0.65 + D-01).
+# The S-01 model and feature parts are re-used READ-ONLY (fit / features are refused for this experiment).
+inherit: exp_s01_stage2.yaml
+
+experiment:
+  id: EXP-S-02
+
+paths:
+  output_dir: experiments/runs/EXP-S-02/output   # never the production output/ folder
+
+stage2:
+  features_from: EXP-S-01
+  model_from: EXP-S-01
+  add_floor: .inf            # null = S-01 behaviour (byte-identical); .inf = veto only

@@ -1,0 +1,26 @@
+# EXP-N-03: EXP-N-02 + learned Indic-script LEGAL-FORM words dropped from the cross-script view.
+# ONE change vs the control (EXP-N-02 + D-01): a second stage of the train-pair-learned map marks
+# unmapped non-Latin tokens that co-occur with S1 legal forms (e.g. an Indic "private limited")
+# across many DIFFERENT businesses, and that no single content word explains, as legal-form words;
+# they are dropped from name_xlit exactly like name_views drops Latin legal forms from name_core.
+# Learned only from provided train true pairs (same leakage design as N-02: fit-set final map,
+# cross-fitted training maps, inner-tune fold excluded, validation S1 raise). No external resource.
+# Everything else identical to EXP-N-02; LightGBM retrained (the view feeds blocking + features).
+inherit: exp_n02_transliteration.yaml
+
+experiment:
+  id: EXP-N-03
+
+paths:
+  output_dir: experiments/runs/EXP-N-03/output   # never the production output/ folder
+
+xlit:
+  legal_tokens:
+    enabled: true
+    min_support: 20            # distinct businesses whose S1 name carries a legal form
+    min_confidence: 0.8        # share of the token's businesses that carry a legal form
+    max_content_confidence: 0.5  # no single content word may explain the token
+
+scoring:
+  tag: scored_EXP-N-03
+  eval_source_tag: null

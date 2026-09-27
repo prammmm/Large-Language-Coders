@@ -1,0 +1,17 @@
+# EXP-S-01b: EXP-S-01 WITHOUT count/position-dependent context features (robustness to the denser test
+# pool: test S1 have more eligible candidates and records more claimants than train S1).
+# ONE change vs EXP-S-01: stage2.exclude_features. Same feature parts (read-only), same training
+# partition, same decision-rule search. Decision rule declared before measuring: prefer S-01b as the
+# final system if its held-out F0.5 (E half B and validation) is within 0.001 of S-01 AND its test
+# acceptance inflation over the control is clearly lower; otherwise keep S-01.
+inherit: exp_s01_stage2.yaml
+
+experiment:
+  id: EXP-S-01b
+
+paths:
+  output_dir: experiments/runs/EXP-S-01b/output
+
+stage2:
+  features_from: EXP-S-01
+  exclude_features: [s1_n_cand, s1_rel_pos, s1_n_ge_05, s1_n_ge_08, rec_n_claim, rec_n_claim_ge_05, peer_n]

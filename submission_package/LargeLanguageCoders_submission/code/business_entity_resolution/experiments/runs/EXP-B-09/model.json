@@ -1,0 +1,279 @@
+{
+  "type": "lightgbm",
+  "features": [
+    "name_norm_eq",
+    "name_core_eq",
+    "name_core_jaccard",
+    "name_shared_tokens",
+    "name_ratio",
+    "name_token_set",
+    "name_concat_jw",
+    "name_len_diff",
+    "addr_norm_eq",
+    "addr_jaccard",
+    "addr_ratio",
+    "addr_token_set",
+    "addr_num_jaccard",
+    "addr_num_shared",
+    "addr_shared_useful",
+    "addr_any_empty",
+    "cheap_score",
+    "cheap_rank",
+    "name_core_jaccard*addr_num_jaccard",
+    "name_ratio*addr_token_set",
+    "num_conflict",
+    "legal_form_conflict",
+    "xlit_core_jaccard",
+    "xlit_token_set"
+  ],
+  "booster_file": "model.lgb.txt",
+  "params": {
+    "objective": "binary",
+    "learning_rate": 0.05,
+    "num_leaves": 31,
+    "max_depth": 8,
+    "min_data_in_leaf": 100,
+    "feature_fraction": 0.9,
+    "bagging_fraction": 0.8,
+    "bagging_freq": 1,
+    "lambda_l2": 1.0,
+    "num_threads": 8,
+    "seed": 42,
+    "deterministic": true,
+    "force_row_wise": true,
+    "verbosity": -1
+  },
+  "meta": {
+    "n_train_pairs": 3128080,
+    "positives": 531259,
+    "n_early_stopping_pairs": 780662,
+    "num_boost_round_max": 1000,
+    "early_stopping_rounds": 50,
+    "best_iteration": 1000,
+    "fit_seconds": 89.01,
+    "params": {
+      "objective": "binary",
+      "learning_rate": 0.05,
+      "num_leaves": 31,
+      "max_depth": 8,
+      "min_data_in_leaf": 100,
+      "feature_fraction": 0.9,
+      "bagging_fraction": 0.8,
+      "bagging_freq": 1,
+      "lambda_l2": 1.0,
+      "num_threads": 8,
+      "seed": 42,
+      "deterministic": true,
+      "force_row_wise": true,
+      "verbosity": -1,
+      "metric": "binary_logloss"
+    },
+    "threshold": 0.65,
+    "inner_tune": {
+      "f05": 0.947857046696328,
+      "macro_precision": 0.9799512230385535,
+      "macro_recall": 0.8968390808221832,
+      "singleton_false_positive": 167,
+      "predicted_per_s1": 3.16060970115633
+    },
+    "fit_s1": 200000,
+    "inner_tune_s1": 39954,
+    "seed": 42,
+    "config": "configs/exp_b09_name_num.yaml",
+    "blocking": {
+      "top_k": 20,
+      "encode_chunk_rows": 250000,
+      "max_raw_pairs_per_chunk": 4000000,
+      "strip_leading_zeros": true,
+      "passes": {
+        "exact_name": {
+          "enabled": true,
+          "max_block_size": 50,
+          "weight": 2.0
+        },
+        "addr_num_word": {
+          "enabled": true,
+          "max_block_size": 50,
+          "max_nums": 2,
+          "max_words": 4,
+          "word_max_df": 500000,
+          "weight": 1.0
+        },
+        "addr_rare_word": {
+          "enabled": true,
+          "max_df": 20,
+          "weight": 1.0
+        },
+        "name_token": {
+          "enabled": true,
+          "max_df": 200,
+          "weight": 1.0,
+          "pair": true,
+          "max_tokens": 2,
+          "name_max_df": 1000000000,
+          "max_block_size": 50
+        },
+        "exact_core": {
+          "enabled": true,
+          "max_block_size": 50,
+          "weight": 1.0,
+          "with_addr_words": true,
+          "max_words": 30
+        },
+        "sorted_core": {
+          "enabled": true,
+          "max_block_size": 50,
+          "weight": 2.0
+        },
+        "name_addr": {
+          "enabled": true,
+          "max_name_tokens": 2,
+          "max_words": 3,
+          "word_max_df": 500000,
+          "max_block_size": 50,
+          "weight": 1.0
+        },
+        "addr_pair": {
+          "enabled": true,
+          "max_words": 3,
+          "word_max_df": 500000,
+          "max_block_size": 50,
+          "weight": 1.0
+        },
+        "name_num": {
+          "enabled": true,
+          "max_name_tokens": 2,
+          "max_nums": 2,
+          "max_block_size": 50,
+          "weight": 1.0
+        }
+      },
+      "name_view": "name_xlit"
+    },
+    "features_options": {
+      "strip_leading_zeros": true,
+      "extra": [
+        "num_conflict",
+        "legal_form_conflict",
+        "xlit_core_jaccard",
+        "xlit_token_set"
+      ]
+    },
+    "solver": "LightGBM gbdt, binary logloss; early stopping + threshold on the inner train-fold split",
+    "training_parts": "data\\processed\\train\\scored_EXP-B-09_fit",
+    "xlit": {
+      "params": {
+        "legal_tokens": {
+          "enabled": true,
+          "max_content_confidence": 0.5,
+          "min_confidence": 0.8,
+          "min_support": 20
+        },
+        "min_confidence": 0.5,
+        "min_support": 3
+      },
+      "final_map": "experiments\\runs\\EXP-B-09\\xlit_map.json",
+      "final_map_learned_from_digest": "947ddcb6520c7762742941071eb76e1b4ba769ef14dd9b39606d9ee4c9282b44",
+      "final_map_mappings": 1262,
+      "training_features": "cross-fitted out-of-fold maps (fold 0 = inner tune, excluded from all maps)"
+    },
+    "feature_importance": {
+      "name_norm_eq": {
+        "gain_share": 0.004616117394356321,
+        "splits": 196
+      },
+      "name_core_eq": {
+        "gain_share": 0.001335462395104396,
+        "splits": 77
+      },
+      "name_core_jaccard": {
+        "gain_share": 0.005708167532855288,
+        "splits": 909
+      },
+      "name_shared_tokens": {
+        "gain_share": 0.001229408682987352,
+        "splits": 524
+      },
+      "name_ratio": {
+        "gain_share": 0.006154681138500953,
+        "splits": 1847
+      },
+      "name_token_set": {
+        "gain_share": 0.010168409827295197,
+        "splits": 2473
+      },
+      "name_concat_jw": {
+        "gain_share": 0.010993898490106393,
+        "splits": 2225
+      },
+      "name_len_diff": {
+        "gain_share": 0.016472209556838754,
+        "splits": 2848
+      },
+      "addr_norm_eq": {
+        "gain_share": 6.639077069477755e-06,
+        "splits": 14
+      },
+      "addr_jaccard": {
+        "gain_share": 0.0044209783722471314,
+        "splits": 1853
+      },
+      "addr_ratio": {
+        "gain_share": 0.018524842137164682,
+        "splits": 1609
+      },
+      "addr_token_set": {
+        "gain_share": 0.023623017911979967,
+        "splits": 2120
+      },
+      "addr_num_jaccard": {
+        "gain_share": 0.029439011776799445,
+        "splits": 1260
+      },
+      "addr_num_shared": {
+        "gain_share": 0.003216058271091568,
+        "splits": 446
+      },
+      "addr_shared_useful": {
+        "gain_share": 0.005291620656440835,
+        "splits": 1408
+      },
+      "addr_any_empty": {
+        "gain_share": 6.000547208281119e-06,
+        "splits": 4
+      },
+      "cheap_score": {
+        "gain_share": 0.3997416834615924,
+        "splits": 3021
+      },
+      "cheap_rank": {
+        "gain_share": 0.03658604440913825,
+        "splits": 922
+      },
+      "name_core_jaccard*addr_num_jaccard": {
+        "gain_share": 0.04337940996133319,
+        "splits": 694
+      },
+      "name_ratio*addr_token_set": {
+        "gain_share": 0.2674246400958962,
+        "splits": 1499
+      },
+      "num_conflict": {
+        "gain_share": 0.05990988423211614,
+        "splits": 452
+      },
+      "legal_form_conflict": {
+        "gain_share": 0.0089095104670708,
+        "splits": 334
+      },
+      "xlit_core_jaccard": {
+        "gain_share": 0.01790080781608153,
+        "splits": 1135
+      },
+      "xlit_token_set": {
+        "gain_share": 0.02494149578872546,
+        "splits": 2130
+      }
+    }
+  }
+}

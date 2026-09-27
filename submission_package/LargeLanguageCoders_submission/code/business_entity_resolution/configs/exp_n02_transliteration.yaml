@@ -1,0 +1,78 @@
+# EXP-N-02: cross-script name view learned ONLY from provided train true-match pairs.
+# ONE conceptual change vs the control (EXP-B-04 + EXP-D-01): a train-learned token map
+# (non-Latin token -> Latin token) gives a "name_xlit" view that
+#   (1) replaces name_core as the input of the existing name-token blocking keys (sorted_core,
+#       name_addr; also exact_core / name_token if ever enabled) -- identical to name_core for any
+#       name without a mapped token, so all-Latin records produce exactly the B-04 keys;
+#   (2) feeds two new similarity features: xlit_core_jaccard, xlit_token_set.
+# LightGBM is RETRAINED (blocker + features change). Leakage design: see src/ber/pipeline/xlit.py
+# (map for validation / E / test learned from the 200k fit S1 only; training rows use cross-fitted
+# out-of-fold maps; the inner-tune fold never contributes to any map; validation S1 raise).
+# Unchanged: normalization, B-04 blocker settings (window 3, cap 50, top_k 20), the 22 B-04
+# inputs, LightGBM hyper-parameters, 200k fit set, inner-split threshold procedure, seed 42,
+# frozen validation, D-01 (best claimant, margin 0). No external resource of any kind.
+inherit: exp_b04_blocking_v2.yaml
+
+experiment:
+  id: EXP-N-02
+
+paths:
+  output_dir: experiments/runs/EXP-N-02/output   # never the production output/ folder
+
+xlit:
+  enabled: true
+  min_support: 3        # distinct S1 entities supporting a (non-Latin, Latin) token correspondence
+  min_confidence: 0.5   # support / distinct S1 entities containing the non-Latin token
+  folds: 5              # cross-fitting folds for `fit` (fold 0 == inner-tune split)
+
+blocking:
+  name_view: name_xlit
+
+features:
+  strip_leading_zeros: true
+  extra: [num_conflict, legal_form_conflict, xlit_core_jaccard, xlit_token_set]
+
+matcher:
+  type: lightgbm
+  model_path: null
+  features:
+    - name_norm_eq
+    - name_core_eq
+    - name_core_jaccard
+    - name_shared_tokens
+    - name_ratio
+    - name_token_set
+    - name_concat_jw
+    - name_len_diff
+    - addr_norm_eq
+    - addr_jaccard
+    - addr_ratio
+    - addr_token_set
+    - addr_num_jaccard
+    - addr_num_shared
+    - addr_shared_useful
+    - addr_any_empty
+    - cheap_score
+    - cheap_rank
+    - name_core_jaccard*addr_num_jaccard
+    - name_ratio*addr_token_set
+    - num_conflict
+    - legal_form_conflict
+    - xlit_core_jaccard
+    - xlit_token_set
+
+scoring:
+  tag: scored_EXP-N-02
+  eval_source_tag: null
+
+fit:
+  max_train_s1: 200000
+  reuse_fit_parts: null
+  dev_subsample_s1: null
+
+decision:
+  threshold_from: model
+  competition:
+    enabled: true
+    rule: best_claimant
+    margin: 0.0

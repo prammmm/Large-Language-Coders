@@ -1,0 +1,23 @@
+# EXP-M-02: learned matcher (logistic regression) on the EXP-B-01 blocking and features.
+# ONE change vs EXP-B-01: matcher.type weighted_rule -> logistic; threshold from the
+# train-fold inner split (not from validation).
+#   fit       : blocks + features for a seeded sample of TRAIN-fold S1 (validation excluded)
+#   evaluate  : re-scores the stored EXP-B-01 validation features (identical candidates)
+inherit: baseline_v0.yaml
+
+experiment:
+  id: EXP-M-02
+
+scoring:
+  tag: scored_EXP-M-02           # everything this experiment WRITES (fit parts, test parts)
+  eval_source_tag: scored        # `evaluate` READS the EXP-B-01 validation parts (identical candidates)
+
+matcher:
+  type: logistic
+
+decision:
+  threshold_from: model          # tuned on the inner train-fold split during `fit`
+  threshold: 0.5                 # fallback only
+
+fit:
+  max_train_s1: 200000

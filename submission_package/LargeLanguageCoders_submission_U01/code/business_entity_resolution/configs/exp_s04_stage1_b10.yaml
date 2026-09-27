@@ -1,0 +1,17 @@
+# EXP-S-04 stage 1: the EXP-B-10 blocker EXACTLY (3-token name-token pair, weight 1.0, top-K 20, all other passes / caps
+# unchanged) with a freshly RETRAINED stage-1 LightGBM (DEC-017: same features, hyperparameters, fit set, seed 42, inner-split
+# threshold, xlit map). D-01 unchanged. Every artefact goes to experiments/runs/EXP-S-04/ or the scored_EXP-S-04* parts.
+inherit: exp_b10_name_pair3.yaml
+
+experiment:
+  id: EXP-S-04
+
+paths:
+  output_dir: experiments/runs/EXP-S-04/output_stage1   # stage-1-only output (diagnostic; never root output/)
+
+matcher:
+  model_path: null        # -> experiments/runs/EXP-S-04/model.json (fresh fit)
+
+scoring:
+  tag: scored_EXP-S-04
+  eval_source_tag: null
