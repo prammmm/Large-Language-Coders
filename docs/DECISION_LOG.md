@@ -210,6 +210,50 @@ Status: Proposed
 
 ---
 
+## DEC-023 — Self-contained numpy in the project env (EXP-B-09 preflight)
+
+Date: 2026-09-27
+
+Context:
+- numpy was imported from the user site (pip 2.2.4, OpenBLAS), shadowing the env's conda-forge 2.2.6 (MKL).
+- The env build crashes on BLAS calls (Windows 0xc06d007f).
+
+Decision:
+- `pip install --no-deps numpy==2.2.4` into the env. It is byte-identical to the reference build (430 files; core module sha256 ccb63339...).
+- Run everything with `PYTHONNOUSERSITE=1`; pin it in `environment.yml`.
+
+Evidence:
+- A B-06 re-run reproduced every validation column, the xlit map, validation F0.5 and the test-output hashes exactly.
+- 213 / 213 tests pass under PYTHONNOUSERSITE=1.
+
+Status: Applied (reversible: `conda install numpy` restores the conda build)
+
+---
+
+## DEC-022 — Pre-submission evidence standard (team instruction)
+
+Date: 2026-09-27
+
+Context: S-01 raised local F0.5 by +0.0125 and lost about 0.015 publicly.
+
+Decision (team, recorded):
+- No model is recommended for a leaderboard submission because local F0.5 rose.
+- Required first:
+  1. local, frozen-validation and E half B improvement;
+  2. density-tier stability;
+  3. locked-shadow agreement;
+  4. precision, false-merge and singleton-FP control;
+  5. reasonable test-side behaviour;
+  6. no leakage;
+  7. deterministic output;
+  8. strict and official validation.
+- Then a public-transfer estimate from historical public results, never called guaranteed.
+- A submission is approved only when an improvement over the current public control (0.935) is strongly supported.
+
+Status: Accepted (team instruction)
+
+---
+
 ## DEC-021 — Stage 2 restricted to a veto (EXP-S-02); shadow benchmark v2 for public-transfer checks
 
 Date: 2026-09-27

@@ -403,13 +403,13 @@ def run_block_eval(cfg: dict, paths: Paths) -> dict:
     sel = (rank < k) & is_true
     contrib = {}
     for i, name in enumerate(PASS_ORDER):
-        bit = np.uint8(1 << i)
-        has = (flag & bit) > 0
+        bit = 1 << i  # python int: works for uint8 and uint16 flag arrays (EXP-B-09 adds bit 8)
+        has = (flag.astype(np.uint16) & bit) > 0
         if not has.any():
             continue
         contrib[name] = {
             "true_pairs_with_this_key": int((sel & has).sum()),
-            "true_pairs_only_this_key": int((sel & (flag == bit)).sum()),
+            "true_pairs_only_this_key": int((sel & (flag.astype(np.uint16) == bit)).sum()),
             "candidates_with_this_key": int(((rank < k) & has).sum()),
         }
     report = {

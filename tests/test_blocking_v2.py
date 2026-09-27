@@ -101,8 +101,9 @@ def test_cheap_score_reflects_new_keys():
     assert b[0][3] > a[0][3]  # an extra shared key raises cheap_score -> the model must be retrained
 
 
-def test_pass_flags_fit_in_uint8():
-    assert len(PASS_ORDER) <= 8
+def test_pass_flags_fit_in_uint16():
+    # EXP-B-09 added a 9th pass: flags are stored as uint16 when it is enabled (uint8 otherwise, see test_blocking_b09 G)
+    assert len(PASS_ORDER) <= 16
 
 
 @pytest.fixture(scope="module")

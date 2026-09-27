@@ -554,3 +554,57 @@ No root `output/` write, no submission, no commit or push. No dependency change.
 - **Result:** EXP-S-02 KEEP (all pre-declared gates). Validation 0.9499 vs B-06 0.9470. Density-robust; S-01's advantage collapses on the new tiers.
 - **Outputs:** `experiments/runs/EXP-S-02/`. Root `output/` untouched (still S-01). No submission, nothing committed.
 - **Extra run folder:** `experiments/runs/EXP-S-02_nullcheck/` (real-data null-floor regression).
+
+---
+
+## 2026-09-27 (late morning) — EXP-B-08 top-K 30 (Claude Code)
+
+- **New files:**
+  - config `configs/exp_b08_topk30.yaml`;
+  - tests `tests/test_topk_b08.py` (6; suite 197 / 197);
+  - streamed evaluation `scripts/analysis/exp_b08.py` (score-alltrain, sanity, eval, decompose, testdiag, budget, keyforensic, leakage, gates).
+- **Pipeline:** block-eval, fit, train, all-train scoring, infer, submit ×2. Every step ≤ 4.05 GB; deterministic; strict and official validators PASS.
+- **Result:** REJECT. +0.0017 to +0.0019 on every held-out population, below the pre-declared +0.002 bar; clean and density-stable.
+- **Incident:** the EXP-S-02 reproduction was re-run outside this session between 07:56 and 08:46. It rewrote the shadow v2 manifest (timestamp only; masks byte-identical) and the S-02 analysis JSONs, and reproduced every S-02 number.
+- **Known pipeline property (pre-existing):** candidate generation depends slightly on which S1 are blocked together (~0.002% of pairs).
+- **Outputs:** `experiments/runs/EXP-B-08/`. Root `output/` untouched (S-01). No submission, nothing committed.
+
+---
+
+## 2026-09-27 (afternoon) — EXP-B-09 name-token x house-number key (Claude Code)
+
+- **Preflight:** env numpy made self-contained (DEC-023); the B-06 reference reproduced exactly; GPU unavailable for LightGBM (OpenCL crash, no CUDA build); CPU used.
+- **Code:**
+  - `name_num` pass in `ber.blocking.blocker`; uint16 flags only when enabled; block-eval bit fix;
+  - `configs/exp_b09_name_num.yaml`;
+  - tests `tests/test_blocking_b09.py` (10; suite 213 / 213);
+  - analysis `scripts/analysis/exp_b09.py`, `exp_b09_eval.py`, `exp_b09_extra.py`.
+- **Result:** kill gate passed (+0.0082 recall@20); end to end +0.0032 F0.5 but precision -0.0012 and test weak acceptance +15.8%, so **REJECT** under the pre-declared gates.
+- **Incident:** an external B-08 re-run (infer, then submit) competed for resources; stopped at the team's request before it could overwrite B-08 outputs. B-08's test scored parts (`data/processed/test/scored_EXP-B-08`) are incomplete (47 parts) and need a B-08 `infer` to restore. B-08 outputs and model are intact.
+- **Outputs:** `experiments/runs/EXP-B-09/` (output isolated). Root `output/` untouched. No submission, nothing committed.
+
+---
+
+## 2026-09-27 (evening) — EXP-S-03 veto refitted on B-09 (Claude Code)
+
+- **Code:** config `configs/exp_s03_veto_on_b09.yaml`; tests `tests/test_stage2_s03.py` (5; suite 218 / 218); analysis `scripts/analysis/exp_s03.py`. No production code change.
+- **Result:** KEEP. All gates A-P pass: +0.0032 to +0.0034 F0.5 over B-09, precision +0.0068, false merges -49%, 0 additions, density-stable.
+- **Output:** `experiments/runs/EXP-S-03/output/` (candidates byte-identical to B-09). Root `output/` untouched (still S-01). Not submitted, nothing committed.
+- **GPU:** unavailable for LightGBM (CPU used).
+
+---
+
+## 2026-09-27 (evening) — S-03 public 0.942; EXP-B-10 rejected at the kill gate (Claude Code)
+
+- **S-03 public:** 0.942 (team-reported; previous control 0.935). Root `output/` holds S-03.
+- **EXP-B-10:** `name_token.max_tokens` 3 on B-09 (config + 6 tests; suite 224 / 224).
+  - Blocking recall@20 +0.0028 < the +0.003 kill gate, so it stopped before the retrain.
+  - The key recovers the targeted name-only pairs (77% of those entering the top-20), but 1,441 true pairs rank beyond 20 (limited by the cheap-score ranking).
+- **Nothing committed.** No submission.
+
+## 2026-09-27 (evening) — EXP-B-11 rejected at the kill gate (Claude Code)
+
+- **EXP-B-11:** `name_token.weight` 1.0 -> 2.0 on the B-10 blocker (config + 8 tests; suite 232 / 232).
+  - Blocking recall@20 0.9584: +0.0015 vs B-09, **-0.0012 vs B-10**. Kill gate KA / KB / KD fail, so it stopped before the retrain.
+  - The weight moves 742 of the 1,441 targeted pairs into the top-20, but it pushes out 2,305 address-evidence true pairs (68% share a house number, none name-only). Net -941 true vs B-10.
+- **Nothing committed.** No submission. Root `output/` still holds S-03.

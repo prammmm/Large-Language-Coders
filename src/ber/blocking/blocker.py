@@ -9,6 +9,7 @@ Passes (each can be switched on/off and capped in the config):
     sorted_core     key = sorted name_core tokens                     (EXP-B-02 B)
     name_addr       key = (rarest name_core token, rarest useful address word) (EXP-B-04 B)
     addr_pair       key = unordered pair of the record's rarest useful address words (EXP-B-04 C)
+    name_num        key = (rarest name-view token, rarest house number)          (EXP-B-09)
   option strip_leading_zeros: "04126" == "4126" for address-number keys (EXP-B-02 C)
 
 Mechanics (all numpy/pyarrow, no Python loops over records):
@@ -33,7 +34,7 @@ import pyarrow.compute as pc
 
 from ber.normalization.views import ADDRESS_STOPWORDS
 
-PASS_ORDER = ("exact_name", "addr_num_word", "addr_rare_word", "name_token", "exact_core", "sorted_core", "name_addr", "addr_pair")
+PASS_ORDER = ("exact_name", "addr_num_word", "addr_rare_word", "name_token", "exact_core", "sorted_core", "name_addr", "addr_pair", "name_num")
 
 _LEADING_ZEROS = r"(^|\s)0+(\d)"
 
@@ -367,6 +368,27 @@ class CountryBlocker:
                 sel = t_df[t_tok] <= c["max_df"]
                 self._add_pass("name_token", [t_rec[sel], t_tok[sel]], c)
 
+        # --- EXP-B-09: (rarest name-view token) x (rarest house number). Recovers pairs that share COMMON name
+        # tokens plus a house number, which the rarest-token keys miss. Same selection rules as the other
+        # combination keys: pool-present tokens / numbers only (DF >= 1), `max_name_tokens` rarest tokens x
+        # `max_nums` rarest zero-stripped numbers (the addr_num_word number view); block cap applies.
+        c = pcfg.get("name_num", {})
+        if c.get("enabled", False):
+            t_rec, t_tok, t_vocab = encode(name_view, split=True)
+            t_df = np.bincount(t_tok[t_rec >= self.n_s1], minlength=len(t_vocab))
+            tsel = t_df[t_tok] >= 1
+            n_rec, n_tok, n_vocab = encode("addr_nums", split=True, transform=num_transform)
+            n_df = np.bincount(n_tok[n_rec >= self.n_s1], minlength=len(n_vocab))
+            nsel = n_df[n_tok] >= 1
+            keys = list(cross_keys(t_rec[tsel], t_tok[tsel], t_df, int(c["max_name_tokens"]), n_rec[nsel], n_tok[nsel], n_df,
+                                   int(c["max_nums"]), max(len(n_vocab), 1), chunk_rows))
+            del t_rec, t_tok, tsel, n_rec, n_tok, nsel
+            self._add_pass("name_num", keys, c)
+
+        # pass-flag storage: uint8 while every enabled pass has a bit < 8 (all configs before EXP-B-09, unchanged
+        # byte for byte), uint16 once a later pass (bit >= 8) is enabled
+        self.flag_dtype = np.uint16 if any(p.bit > 0xFF for p in self.passes) else np.uint8
+
     # ------------------------------------------------------------------ pass building
     def _add_pass(self, name: str, arrays: list, c: dict) -> None:
         """Build one pass index from ``arrays = [rec, key]``.
@@ -464,10 +486,10 @@ class CountryBlocker:
             s1_parts.append(np.repeat(rec, cnt))
             pool_parts.append(ragged_gather(p.starts[pos], cnt, p.pool_rec))
             w_parts.append(np.repeat(p.weight[pos], cnt))
-            f_parts.append(np.full(int(cnt.sum()), p.bit, np.uint8))
+            f_parts.append(np.full(int(cnt.sum()), p.bit, self.flag_dtype))
         s1 = np.concatenate(s1_parts) if s1_parts else np.zeros(0, np.int64)
         if len(s1) == 0:
-            return _empty_candidates()
+            return _empty_candidates(self.flag_dtype)
         code = s1.astype(np.int64) * self.n_pool + np.concatenate(pool_parts).astype(np.int64)
         w = np.concatenate(w_parts)
         f = np.concatenate(f_parts)
@@ -494,12 +516,12 @@ class CountryBlocker:
         }
 
 
-def _empty_candidates() -> dict[str, np.ndarray]:
+def _empty_candidates(flag_dtype=np.uint8) -> dict[str, np.ndarray]:
     return {
         "s1_local": np.zeros(0, np.int32),
         "pool_local": np.zeros(0, np.int32),
         "cheap_score": np.zeros(0, np.float32),
         "cheap_rank": np.zeros(0, np.int16),
-        "pass_flags": np.zeros(0, np.uint8),
+        "pass_flags": np.zeros(0, flag_dtype),
         "pairs_before_cap": np.int64(0),
     }

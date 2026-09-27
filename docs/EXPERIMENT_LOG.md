@@ -39,6 +39,11 @@ Every run writes `experiments/runs/<ID>/{config.yaml,metrics.json,notes.md}` (th
 | EXP-S-01b | Count/position context features may not transfer to the denser test pool | S-01 minus 7 count-dependent features | 0.9591 (E-B), 0.9595 (val) | 0.9875 | 0.9148 | 0.9487 | 19.4 | — | Validated alternative; not selected (pre-declared rule: test inflation not clearly lower) |
 | EXP-C-01 / C-02 (diagnostic) | How much does an unseen country lose? | Stage 1 trained on one labelled country only (200k, size-controlled) | India (unseen) 0.8609 vs 0.9358; US (unseen) 0.9108 vs 0.9493 | India 0.883 / US 0.944 | — | same | — | — | Diagnostic: transfer loss is mostly precision |
 | EXP-C-03 (diagnostic) | Does stage 2 help or hurt an unseen country? | Stage 2 trained on US only on top of C-01 | India (unseen) E-B 0.8724 → 0.8932 (+0.0208) | 0.8981 → 0.9133 | — | same | — | — | Diagnostic: stage 2 improves unseen-country precision |
+| EXP-B-10 | No-key pairs share common name tokens; pairing the 3 rarest tokens (not 2) recovers name-only records | `name_token.max_tokens` 2 -> 3 on B-09 (config only) | blocking only: recall@20 0.9569 -> 0.9596 (+0.0028); uncapped +0.0043 | - | - | 0.9596 | 19.6 | not submitted | **REJECT at kill gate** (< +0.003; stopped before retrain; 1,441 newly generated true pairs rank beyond 20; `experiments/runs/EXP-B-10/final_report.md`) |
+| EXP-B-11 | B-10's beyond-20 true pairs are held back by too little cheap-score weight; name_token.pair weight 2.0 lifts them into the top-20 | `name_token.weight` 1.0 -> 2.0 on the B-10 blocker (config only) | blocking only: recall@20 B-09 0.9569 / B-10 0.9596 / B-11 0.9584 (+0.0015 vs B-09, -0.0012 vs B-10); 742 / 1,441 targeted pairs enter top-20 but 2,305 address-evidence true pairs pushed out | - | - | 0.9584 | 19.6 | not submitted | **REJECT at kill gate** (KA +0.0015 < +0.004; KB displaced/new true 0.70 > 0.25; KD US +0.0003 with 0.94 displacement; stopped before retrain; `experiments/runs/EXP-B-11/final_report.md`) |
+| **EXP-S-03** | B-09's precision loss is a decision-layer effect that a refitted veto removes | S-01/S-02 stage-2 recipe refitted on B-09 stage-1 outputs, veto only (final = B-09 + D-01 AND stage 2 @ 0.69 + D-01) | **0.9536** (val; B-09 0.9502, B-06 0.9470), E half B 0.9536, GATE-B 0.9536 | 0.9920 | 0.8889 | 0.9569 | 19.5 | **0.942** (team-reported; control 0.935) | **KEEP** (all gates A-P; false merges -49%; 0 additions; density-stable; `experiments/runs/EXP-S-03/final_report.md`) |
+| EXP-B-09 | Pairs that share a COMMON name token plus a house number are missed by rarest-token keys | new key `name_num` (2 rarest name-view tokens x 2 rarest zero-stripped numbers, cap 50) + stage-1 refit (t 0.65) + D-01; control B-06 + D-01 | 0.9502 (val; 0.9470), E half B 0.9504 (0.9471), GATE-B 0.9503 | 0.9851 (-0.0012) | 0.8931 | 0.9569 | 19.5 | not submitted | **REJECT** (gates C precision -0.0011..-0.0012 and J weak acceptance +15.8% fail; +0.0032 F0.5, recall@20 +0.0082; `experiments/runs/EXP-B-09/final_report.md`) |
+| EXP-B-08 | ~35% of never-retrieved true pairs sit at ranks > 20; a retrained stage 1 recovers them | `blocking.top_k` 20 -> 30 + stage-1 refit (inner threshold 0.68) + D-01; control B-06 + D-01 | 0.9489 (E half B; control 0.9471), 0.9489 (val; 0.9470), GATE-B 0.9489 | 0.9867 | 0.8865 | 0.9562 | 28.25 | not submitted | **REJECT** (pre-declared +0.002 gate: +0.0017..+0.0019; density-stable, precision up; `experiments/runs/EXP-B-08/final_report.md`) |
 | **EXP-S-02** | S-01's removals transfer, its additions do not: a veto-only stage 2 gives a density-robust gain | final = (B-06 + D-01) AND S-01 (`stage2.add_floor: .inf`); no retraining; S-01 model/features read-only | **0.9499** (E half B; control 0.9471), 0.9499 (val), GATE-B 0.9499 | 0.9917 | 0.8800 | 0.9487 (unchanged) | 19.4 | not submitted | **KEEP** (all pre-declared gates; advantage +0.0023 to +0.0027 on every density tier incl. test density; `experiments/runs/EXP-S-02/final_report.md`) |
 | POST-S01-FORENSIC (diagnostic) | Why did S-01 drop from local ≈ 0.96 to public ≈ 0.920? | No production change: submission check, B-06 → S-01 test flips, PSI shift, D-01 variants, a shadow benchmark (Base / Test-Matched / Chain-orphaned), a stage-1 floor sweep | Shadow-Base S-01 0.9596 vs B-06 0.9472; the S-01 advantage shrinks +0.0124 → +0.0079 as look-alike density rises 0.399 → 0.433 (test 0.706) | S-01 P 0.9875 → 0.9792 (Chain members) | — | same | — | — | Cause: context-driven additions on uncontested look-alike records (test 2.14× train rate). Proposed EXP-S-02 (veto only), not implemented |
 | EXP-B-04-k30 | Same blocker, top-K 30 | K 20 → 30 (own refit) | 0.9289 (+0.0015) | 0.9770 | 0.8618 | 0.9339 | 27.8 | — | Not selected (+45% candidates for +0.0015) |
@@ -46,6 +51,45 @@ Every run writes `experiments/runs/<ID>/{config.yaml,metrics.json,notes.md}` (th
 | EXP-D-02 (probe) | A non-linear scorer beats LR on the same features/protocol | MLP 22→64→32→1 (diagnostic, torch) | 0.8870–0.8903 (3 seeds) | 0.968–0.973 | 0.788–0.791 | 0.8597 | 16.1 | — | Evidence for EXP-M-03 (not adopted) |
 
 ## Detailed entries
+
+### EXP-S-03 — S-02-style veto refitted on EXP-B-09 stage 1 (2026-09-27)
+- **Change (one):** stage 2 refitted on B-09 out-of-sample stage-1 scores (S-01 recipe unchanged; inner-split threshold 0.69 + D-01), used as a veto on B-09 + D-01. No code change (config only).
+- **Result [M]:**
+  - vs B-09: validation +0.0034, GATE-B +0.0033, E half B +0.0032;
+  - precision +0.0068; false merges -49%; singleton FP about -47%; 0 additions;
+  - shadow +0.0031 to +0.0035; tiers +0.0031 (T1) to +0.0026 / +0.0027 (T1W / T4W); locked +0.0029 / +0.0032;
+  - India +0.0047, US +0.0024.
+- **Veto [M]:** 1.17% of B-09 acceptances; 59% of vetoes remove false pairs; concentrated in the 0.65-0.8 stage-1 band (24% vetoed; precision 0.80 -> 0.93).
+- **Test [D]:** -1.11% predictions; 0 additions; test/train removals 0.95; France 0.98x overall; candidates byte-identical to B-09.
+- **Decision: KEEP** (not submitted). Cumulative: validation 0.9470 (B-06) -> 0.9536.
+- **Open risk:** no decision-layer system has transferred successfully to the public board yet.
+
+### EXP-B-09 — Name-view token x house-number blocking key (2026-09-27)
+- **Change (one):** a `name_num` pass; stage-1 refit (inner threshold 0.65); D-01. Control: B-06 + D-01 @ 0.67.
+- **Blocking [M]:** validation recall@20 +0.0082 (India +0.0138, US +0.0044); 20% of the no-key pairs recovered; candidates +0.7%; 480 true pairs displaced vs 6,746 entering.
+- **End to end [M]:**
+  - F0.5 +0.0032 on validation / GATE-B, +0.0033 on E half B;
+  - shadow sets +0.0032 to +0.0043; density-stable;
+  - LOCKED +0.0032 / +0.0034;
+  - India +0.0050.
+- **Cost [M/D]:** precision -0.0011 to -0.0012; false merges +8% to +9%; test weak acceptance (score < 0.8) +15.8% (France +18.6%).
+- **Decomposition [M]:** the list change alone gives +0.0029 (its new acceptances are 97% precise); re-scoring at threshold 0.65 adds a net 2,906 false pairs.
+- **Decision: REJECT** (pre-declared gates C and J). Not submitted.
+- **Environment:** the env's numpy was replaced by the byte-identical 2.2.4 wheel; the reference reproduced exactly; `PYTHONNOUSERSITE=1` from now on.
+
+### EXP-B-08 — Candidate list top-K 20 -> 30, stage 1 retrained (2026-09-27)
+- **Change (one):** `blocking.top_k` 30; LightGBM refit on B-08 candidates (inner threshold 0.68) + D-01. Control: B-06 + D-01 @ 0.67.
+- **Result [M]:**
+  - validation +0.0019, GATE-B +0.0018, E half B +0.0018, halves +0.0020 / +0.0018;
+  - SHADOW-BASE +0.0017, TEST-MATCHED +0.0018, CHAIN-ORPHANED +0.0017, CHAIN-MEMBERS +0.0031;
+  - locked sets +0.0015 / +0.0016;
+  - density tiers +0.0015 to +0.0018 with no decay;
+  - precision up, false merges down, India and US up;
+  - blocking recall 0.9487 -> 0.9562.
+- **Mechanism [M]** (E half B): ranks 21-30 add 8.87M candidates, 26,307 of them true. The model accepts 17,663 of them (17,246 true, 417 false), worth +0.0019; re-scoring of ranks 1-20 is -0.0002.
+- **Test behaviour [D]:** +0.48% predictions (France +1.45%, carrying 32% of the new-rank acceptances; India +0.51%; US +0.06%); candidates per S1 19.3 -> 28.0; the B-06 list is the exact prefix in every row.
+- **Decision: REJECT.** The pre-declared +0.002 gate fails on 6 of the 7 validation / GATE-B / E half B / shadow gate populations; everything else passes. Not submitted.
+- **Next:** never-retrieved is still the largest bucket (4.38% of true pairs, oracle +0.0168); about 76% of it is generated by no key. A key-level forensic is proposed (not run: the brief made it conditional on a pass).
 
 ### EXP-S-02 — Stage 2 as a veto only + shadow benchmark v2 (2026-09-27)
 - **Hypothesis:** S-01's removals are pair-level corrections that transfer; its additions are what break under the test's look-alike regime.

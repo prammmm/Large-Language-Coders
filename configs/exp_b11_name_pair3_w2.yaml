@@ -1,0 +1,25 @@
+# EXP-B-11: rank repair for B-10's 3-token name-token-pair retrieval.
+# ONE change vs EXP-B-10's blocker: blocking.passes.name_token.weight 1.0 -> 2.0 (the name_token pass runs in pair mode,
+# pair: true, so this is the name-token-pair cheap-score weight). Fixed before any B-11 result; no sweep.
+# Everything else = B-10 (max_tokens 3, cap 50, DF rules, name view, top-K 20, other weights, name_num).
+# Control: EXP-B-09 + D-01. Stage-1 LightGBM retrained on B-11 candidates only if the blocking kill gate passes (DEC-017).
+# No stage-2 / veto. Outputs only under experiments/runs/EXP-B-11/.
+inherit: exp_b10_name_pair3.yaml
+
+experiment:
+  id: EXP-B-11
+
+paths:
+  output_dir: experiments/runs/EXP-B-11/output
+
+blocking:
+  passes:
+    name_token:
+      weight: 2.0
+
+matcher:
+  model_path: null        # -> experiments/runs/EXP-B-11/model.json
+
+scoring:
+  tag: scored_EXP-B-11
+  eval_source_tag: null

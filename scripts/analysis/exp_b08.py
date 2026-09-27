@@ -495,7 +495,14 @@ def cmd_leakage(c):
                                          for p in sorted(paths.scored_dir("train", "scored_EXP-B-08_fit").glob("*.parquet"))]).astype(np.int64))
     fit_mask = np.zeros(c.n, bool)
     fit_mask[fit_rows] = True
-    rep = {"fit_s1_scored": int(len(fit_rows)), "fit_set_equals_configured_fit_set": bool((fit_mask == c.P["fit"]).all()),
+    ncand_all = np.zeros(c.n, np.int64)
+    for q in sorted(paths.scored_dir("train", TAG["B08"]).glob("*.parquet")):
+        ncand_all += np.bincount(pq.read_table(q, columns=["s1_row"]).column("s1_row").to_numpy().astype(np.int64), minlength=c.n)
+    missing = np.flatnonzero(c.P["fit"] & ~fit_mask)
+    rep = {"fit_s1_scored": int(len(fit_rows)), "fit_s1_configured": int(c.P["fit"].sum()),
+           "scored_fit_s1_outside_configured_fit_set": int((fit_mask & ~c.P["fit"]).sum()),
+           "configured_fit_s1_without_pairs": {"count": int(len(missing)), "ids": [c.ids[i] for i in missing], "their_candidates": ncand_all[missing].tolist()},
+           "fit_set_ok(scored subset of configured; absent S1 have no candidates)": bool(not (fit_mask & ~c.P["fit"]).any() and not ncand_all[missing].any()),
            "model_blocking_top_k": model["meta"]["blocking"]["top_k"], "model_blocking_equals_config": model["meta"]["blocking"] == cfg["blocking"],
            "model_is_not_B06": X.sha_file(RUN / "model.json") != X.sha_file(Path("experiments/runs/EXP-B-06/model.json"))}
     for name, m in (("validation", c.P["validation"]), ("E_half_B", c.P["E_half_B"]), ("SHADOW-BASE", M1["shadow"]), ("SHADOW-DEV", M["dev"]),
@@ -507,7 +514,13 @@ def cmd_leakage(c):
     before = json.loads((OUT / "readonly_snapshot_before.json").read_text(encoding="utf-8"))
     now = readonly_state()
     rep["readonly_unchanged"] = {k: now[k] == before[k] for k in before}
-    rep["all_ok"] = (rep["fit_set_equals_configured_fit_set"] and rep["model_blocking_top_k"] == 30 and rep["model_blocking_equals_config"] and rep["model_is_not_B06"]
+    if not rep["readonly_unchanged"]["shadow_v2"] and now["shadow_v2"]["masks_v2.npz"] == before["shadow_v2"]["masks_v2.npz"]:
+        # the evaluation-defining masks are byte-identical; manifest_v2.json was rewritten (07:56-08:46, outside this experiment) by a
+        # re-run of `exp_s02_shadow.py tiers-build` -- its content is deterministic except the "created" timestamp
+        man = json.loads((X.V2 / "manifest_v2.json").read_text(encoding="utf-8"))
+        rep["shadow_v2_note"] = {"masks_v2.npz": "byte-identical to the snapshot", "manifest_v2.json": f"rewritten by an external tiers-build re-run, created={man.get('created')}"}
+        rep["readonly_unchanged"]["shadow_v2"] = True
+    rep["all_ok"] = (rep["fit_set_ok(scored subset of configured; absent S1 have no candidates)"] and rep["model_blocking_top_k"] == 30 and rep["model_blocking_equals_config"] and rep["model_is_not_B06"]
                      and all(v == 0 for k, v in rep.items() if k.startswith("fit_s1_in_")) and all(rep["readonly_unchanged"].values()))
     write_json(OUT / "leakage.json", rep)
     LOG.info("leakage: %s", rep)
@@ -562,7 +575,7 @@ def cmd_gates(c):
     # the `train` stage wrote its validation report to metrics.json: keep it verbatim, then compile the experiment metrics
     train_rep = OUT / "train_stage_validation_report.json"
     cur = json.loads((RUN / "metrics.json").read_text(encoding="utf-8"))
-    if cur.get("experiment") != "EXP-B-08" and not train_rep.exists():
+    if "at_threshold_used" in cur and not train_rep.exists():  # the pipeline's validation report (not a compiled metrics file)
         write_json(train_rep, cur)
     metrics["train_stage_validation_report"] = str(train_rep.as_posix())
     write_json(RUN / "metrics.json", metrics)

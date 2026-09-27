@@ -1,0 +1,23 @@
+# EXP-B-10: name_token.pair widened from the 2 to the 3 rarest pool-present name-view tokens, on top of EXP-B-09.
+# ONE change vs the control (B-09 + D-01): blocking.passes.name_token.max_tokens 2 -> 3 (config only; same pass, bit, cap,
+# weight, DF rules, name view). Stage-1 LightGBM retrained on B-10 candidates (DEC-017); inner-split threshold; D-01.
+# No stage-2 / veto in this experiment. Outputs only under experiments/runs/EXP-B-10/.
+inherit: exp_b09_name_num.yaml
+
+experiment:
+  id: EXP-B-10
+
+paths:
+  output_dir: experiments/runs/EXP-B-10/output
+
+blocking:
+  passes:
+    name_token:
+      max_tokens: 3
+
+matcher:
+  model_path: null        # -> experiments/runs/EXP-B-10/model.json
+
+scoring:
+  tag: scored_EXP-B-10
+  eval_source_tag: null
