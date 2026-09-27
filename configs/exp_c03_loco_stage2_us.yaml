@@ -1,0 +1,35 @@
+# EXP-C-03: leave-one-country-out DIAGNOSTIC for the SECOND stage. Stage 1 = EXP-C-01 (trained on US
+# only); stage 2 trained on US S1 only (E half A minus validation); evaluated on India (unseen) and
+# US E half B / validation vs the C-01 stage-1 control (t + D-01). Question: does the collective
+# stage-2 decision REDUCE or INCREASE the transfer loss to an unseen country (proxy for France)?
+inherit: exp_c01_loco_us.yaml
+
+experiment:
+  id: EXP-C-03
+
+paths:
+  output_dir: experiments/runs/EXP-C-03/output
+
+scoring:
+  tag: scored_EXP-C-01
+
+matcher:
+  type: lightgbm
+  model_path: experiments/runs/EXP-C-01/model.json
+
+stage2:
+  stage1_run: EXP-C-01
+  train_tag: forensic_alltrain_C01
+  xlit_map: experiments/runs/EXP-B-06/xlit_map.json
+  min_score: 0.02
+  peers: 3
+  inner_fraction: 0.2
+  chunk_pairs: 1500000
+  workers: 8
+  train_countries: [us]
+  thresholds: {start: 0.30, stop: 0.90, step: 0.01}
+  lightgbm:
+    num_boost_round: 2000
+    early_stopping_rounds: 50
+    params: {learning_rate: 0.05, num_leaves: 63, min_data_in_leaf: 200, feature_fraction: 0.9,
+             bagging_fraction: 0.8, bagging_freq: 1, lambda_l2: 1.0, seed: 42, num_threads: 8}

@@ -489,3 +489,68 @@ Bridge India's script-mismatch pairs with a token map learned only from provided
 
 ### Not done (by instruction)
 No root `output/` write, no submission, no commit or push. No dependency change.
+
+---
+
+## 2026-09-26 (evening) — Plan execution: N-03, B-07, B-06; research review (Claude Code)
+
+- **Step 0:**
+  - backed up the N-02 output (LB 0.928) to `submissions/EXP-N-02_output/`;
+  - `eval_exp_b05.py` accepts any control (`--control-label`, control scoring tags);
+  - refreshed the error budget.
+- **EXP-N-03** (learned Indic legal-form words): E 0.9413 (+0.0010 vs N-02). Below the gate; carried as the base.
+- **EXP-B-07** (exact name × address word, `exact_core.with_addr_words`): E 0.9464 at t 0.67 (precision-first tuning rule, `scripts/analysis/d01_threshold_select.py`). KEEP.
+- **EXP-B-06** (name-token pair, `name_token.pair`): E 0.9471, t 0.67. KEEP (best local).
+- **Probes:** `scripts/analysis/stage2_probe.py` (+0.0017 held-out) and `scripts/analysis/collective_probe.py` (+0.0048 held-out). Review: `reports/RESEARCH_REVIEW_2026-09-26.md`; next is EXP-S-01.
+- **Tests:** 145 / 145. All outputs were validated in their run folders. `output/` holds B-07 t 0.67 (copied by the team). Nothing committed.
+
+---
+
+## 2026-09-27 — Final senior review: audit, EXP-S-01 collective stage 2, LOCO diagnostics, final output (Claude Code)
+
+- **Audit:** `scripts/analysis/audit_summary.py` → `experiments/runs/FINAL/audit_summary.json`. All review claims were verified. Discrepancies documented (the B-07 summary overwrite; root `output/` = B-06). The control is B-06 + D-01 @ 0.67.
+- **EXP-S-01** (`src/ber/decision/stage2.py`, `src/ber/pipeline/run_stage2.py`, `configs/exp_s01_stage2.yaml`), built test-first (`tests/test_stage2.py`, `tests/test_stage2_pipeline.py`):
+  - held-out E half B 0.9471 → **0.9596**, validation 0.9470 → **0.9601**, precision up;
+  - all halves agree; deterministic (byte-identical re-run);
+  - strict + official `--check-ids` PASS. **KEEP — final.**
+- **EXP-S-01b** (no count features): E-B 0.9591 / validation 0.9595. Not selected under the pre-declared rule (test inflation not clearly lower).
+- **LOCO C-01/C-02** (`fit.only_countries`, `xlit.map_path`; `tests/test_loco.py`): unseen-country loss −0.075 / −0.039, mostly precision.
+- **C-03** (`stage2.train_countries`): stage 2 improves unseen India by +0.021.
+- **Label-free diagnostics:** train→test feature shift; test acceptance +9.3% vs +4.0% expected; French "st"/"saint" (≤ 1.7% of French pool records).
+- **Memory fixes:** stage-2 submit 5.14 → 4.79 GB; evaluate 5.41 → 2.98 GB. Tests: **161 / 161**.
+- **Final output:** `experiments/runs/EXP-S-01/output/`. Report: `reports/FINAL_REPORT_2026-09-27.md`. DEC-020 Proposed. Nothing committed; `output/` untouched (still B-06).
+
+---
+
+## 2026-09-27 (later) — POST-S-01 public regression forensics (Claude Code)
+
+- **Trigger:** S-01 public ≈ 0.920 (team-reported) vs best pre-S-01 0.935; local E half B 0.9596.
+- **New code** (diagnostics only, test-first):
+  - `src/ber/forensics/{shadow.py, diagnostics.py}`;
+  - `scripts/analysis/post_s01_forensics.py` (verify / delta / shift / shadow-build / shadow-features / shadow-eval / leakage / floor);
+  - `run_stage2.build_features(drop_s1, out)` and `predict_all(fdir)`, for simulated competitions.
+- **Tests:** `tests/test_shadow.py` (13) plus a drop-mask test in `tests/test_stage2_pipeline.py`. Full suite **175 / 175**.
+- **Shadow benchmark** (`experiments/shadow_tests/`, seed 42):
+  - SHADOW-BASE 446,321 S1 (E half B minus validation);
+  - random-orphaned and chain-orphaned competitions;
+  - leakage checks all 0.
+- **Result:** the regression comes from S-01's context-driven additions on uncontested look-alike records. Test has 1.77× the train density of such candidates, and S-01 adds 2.14× more per S1 on test. Removals transfer 1:1. Ruled out: D-01, implementation, France, per-feature shift, threshold alone.
+- **Proposed** (not implemented): EXP-S-02, stage 2 as a veto only (density-invariant, +0.0027 held-out).
+- **Report:** `experiments/runs/POST-S01-FORENSIC/forensic_report.md`.
+- **Memory:** recorded peaks: 3.77 GB (test side of `delta`) and **5.47 GB** (train side of `delta`). The latter is above the 5 GB working target; it is a diagnostic script, not pipeline code, but should be streamed before any re-run. Other subcommands did not record a peak. `output/` untouched (still the submitted S-01 files). No submission, nothing committed.
+
+---
+
+## 2026-09-27 (morning) — EXP-S-02 veto + shadow benchmark v2 (Claude Code)
+
+- **Code:**
+  - `stage2.add_floor` / `stage2.model_from` (read-only guards) and a shared streamed `control_decisions()` in `run_stage2.py`;
+  - `restrict_additions` in `ber.decision.stage2`;
+  - v2 shadow helpers in `ber.forensics.shadow`;
+  - new script `scripts/analysis/exp_s02_shadow.py`;
+  - config `configs/exp_s02_stage2_veto.yaml`.
+- **Tests:** 191 / 191 (16 new: the veto intersection with forced additions and removals, the null floor reproducing bytes, the read-only model, the streamed control equal to the reference, shadow v2).
+- **Memory fix:** the stage-2 submit membership test now uses `searchsorted`; peak 5.15 → 3.59 GB, output byte-identical.
+- **Result:** EXP-S-02 KEEP (all pre-declared gates). Validation 0.9499 vs B-06 0.9470. Density-robust; S-01's advantage collapses on the new tiers.
+- **Outputs:** `experiments/runs/EXP-S-02/`. Root `output/` untouched (still S-01). No submission, nothing committed.
+- **Extra run folder:** `experiments/runs/EXP-S-02_nullcheck/` (real-data null-floor regression).

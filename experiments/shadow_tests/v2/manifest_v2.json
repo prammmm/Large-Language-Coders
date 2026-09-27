@@ -1,0 +1,939 @@
+{
+  "version": 2,
+  "seed": 42,
+  "created": "2026-09-27 04:39:30",
+  "built_from": {
+    "shadow_base_v1_sha256": "20227e442914bd628de68fac9760caf53af0bfc597116da61fb8b29ce744b4e5",
+    "v1_files_untouched": true
+  },
+  "definitions": {
+    "SHADOW-DEV": "SHADOW-BASE & u01(id,'locked',42) < 0.5 (may be used while iterating)",
+    "SHADOW-LOCKED-A": "SHADOW-BASE & 0.5 <= u < 0.75 (evaluate only after an experiment is frozen)",
+    "SHADOW-LOCKED-B": "SHADOW-BASE & u >= 0.75 (evaluate only after an experiment is frozen)",
+    "tier competitions": "tier_orphan_mask(q): chain members (name_core shared by >= 2 train S1) with u01(id,'tier_orphan',42) < q removed first, other S1 with u < q-1 when q > 1; SHADOW-BASE S1 never removed; removed S1 keep their records in the pool, unclaimed. T1 = base competition.",
+    "look-alike density": "per evaluated S1: eligible candidates with stage-1 score < 0.5, <= 1 claimant among competing S1 (eligible pairs), peer_max_sim >= 0.8 (label-free)",
+    "tier rule (notes.md 1.2 + amendment A1)": "T2/T3 target = base + 1/3, 2/3 of (min(test, max reachable) - base) on SHADOW-DEV, smallest q on a 0.02 grid reaching it; T4 = test density, else q = 2 (flagged)",
+    "weighted tiers (amendment A2)": "T1W / T4W: T1 / T4 competition, evaluated S1 re-weighted so their per-S1 look-alike count distribution (bins 0..4, 5+) equals test's (label-free importance weights, mean 1)"
+  },
+  "sizes": {
+    "SHADOW-DEV": 222890,
+    "SHADOW-LOCKED-A": 111549,
+    "SHADOW-LOCKED-B": 111882
+  },
+  "sha256_ids": {
+    "SHADOW-DEV": "4713e47f308cadcec87b0f78b793f04fe49bc2e16ab4514e35479c7edc20d8f4",
+    "SHADOW-LOCKED-A": "3ae2a999f04b72d18fdbe6d5f9f2c2dd0597f3c9062ec03cdd6fb2d627189891",
+    "SHADOW-LOCKED-B": "652595ec68a913dfe5a9abaf95d6ad6d11da5b78bd35c993b56660c025bf757e"
+  },
+  "fast_density_matches_v1_features": {
+    "base_shadow": {
+      "fast": 0.3994479309734474,
+      "v1": 0.3994479309734474
+    },
+    "chain_orphan_shadow": {
+      "fast": 0.42086973277080847,
+      "v1": 0.42086973277080847
+    },
+    "chain_orphan_chain_members": {
+      "fast": 0.4330768915428868,
+      "v1": 0.4330768915428868
+    }
+  },
+  "density_curve_dev(q, density, orphaned_s1)": [
+    [
+      0.0,
+      0.3987706940643367,
+      0
+    ],
+    [
+      0.02,
+      0.3995962133787967,
+      17377
+    ],
+    [
+      0.04,
+      0.4004172461752434,
+      34609
+    ],
+    [
+      0.06,
+      0.4011081699493024,
+      51934
+    ],
+    [
+      0.08,
+      0.4018394723854816,
+      69400
+    ],
+    [
+      0.1,
+      0.4025393691955673,
+      86499
+    ],
+    [
+      0.12,
+      0.4033559154740006,
+      103936
+    ],
+    [
+      0.14,
+      0.40418592130647407,
+      121094
+    ],
+    [
+      0.16,
+      0.40498003499484053,
+      138484
+    ],
+    [
+      0.18,
+      0.40571582394903316,
+      155645
+    ],
+    [
+      0.2,
+      0.4067163174660146,
+      172996
+    ],
+    [
+      0.22,
+      0.4077212975010095,
+      190210
+    ],
+    [
+      0.24,
+      0.4083808156489748,
+      207604
+    ],
+    [
+      0.26,
+      0.40913903719323436,
+      225083
+    ],
+    [
+      0.28,
+      0.40996904302570775,
+      242361
+    ],
+    [
+      0.3,
+      0.4107631567140742,
+      259735
+    ],
+    [
+      0.32,
+      0.4117142985329086,
+      277179
+    ],
+    [
+      0.34,
+      0.4125667369554489,
+      294403
+    ],
+    [
+      0.36,
+      0.4134281484140159,
+      311924
+    ],
+    [
+      0.38,
+      0.4144286419309974,
+      329378
+    ],
+    [
+      0.4,
+      0.4153124859796312,
+      346867
+    ],
+    [
+      0.42,
+      0.41623222217237205,
+      364115
+    ],
+    [
+      0.44,
+      0.41713849881107273,
+      381417
+    ],
+    [
+      0.46,
+      0.4180627215218269,
+      398810
+    ],
+    [
+      0.48,
+      0.4190138633406613,
+      415822
+    ],
+    [
+      0.5,
+      0.41986181524518823,
+      433182
+    ],
+    [
+      0.52,
+      0.4209475526044237,
+      450379
+    ],
+    [
+      0.54,
+      0.4218672887971645,
+      467573
+    ],
+    [
+      0.56,
+      0.42285432276010587,
+      485026
+    ],
+    [
+      0.58,
+      0.4237875185068868,
+      502364
+    ],
+    [
+      0.6,
+      0.42476109291578806,
+      519707
+    ],
+    [
+      0.62,
+      0.42575709991475613,
+      537177
+    ],
+    [
+      0.64,
+      0.4268204046839248,
+      554522
+    ],
+    [
+      0.66,
+      0.4277850060567993,
+      571779
+    ],
+    [
+      0.68,
+      0.4288258782359011,
+      589216
+    ],
+    [
+      0.7,
+      0.4299564807752703,
+      606798
+    ],
+    [
+      0.72,
+      0.4311454080488133,
+      624180
+    ],
+    [
+      0.74,
+      0.4321862802279151,
+      641486
+    ],
+    [
+      0.76,
+      0.43317780070886985,
+      658939
+    ],
+    [
+      0.78,
+      0.43430391673022567,
+      676371
+    ],
+    [
+      0.8,
+      0.4353447889093275,
+      693758
+    ],
+    [
+      0.82,
+      0.4364978240387635,
+      711218
+    ],
+    [
+      0.84,
+      0.4375611288079322,
+      728760
+    ],
+    [
+      0.86,
+      0.4387455695634618,
+      746167
+    ],
+    [
+      0.88,
+      0.43986719906680427,
+      763522
+    ],
+    [
+      0.9,
+      0.4407914217775584,
+      780797
+    ],
+    [
+      0.92,
+      0.4420162411952084,
+      797903
+    ],
+    [
+      0.94,
+      0.44307954596437704,
+      815269
+    ],
+    [
+      0.96,
+      0.44412041814347886,
+      832869
+    ],
+    [
+      0.98,
+      0.44541702184934273,
+      850153
+    ],
+    [
+      1.0,
+      0.4468930862757414,
+      867580
+    ],
+    [
+      1.02,
+      0.4471847099466104,
+      885412
+    ],
+    [
+      1.04,
+      0.44748082013549284,
+      903366
+    ],
+    [
+      1.06,
+      0.4478487146125892,
+      920984
+    ],
+    [
+      1.08,
+      0.4481852034635919,
+      938905
+    ],
+    [
+      1.1,
+      0.44841850240028713,
+      956993
+    ],
+    [
+      1.12,
+      0.44875947776930325,
+      974813
+    ],
+    [
+      1.14,
+      0.4490196958140787,
+      992507
+    ],
+    [
+      1.16,
+      0.4493202925209745,
+      1010383
+    ],
+    [
+      1.18,
+      0.4495625644936964,
+      1028315
+    ],
+    [
+      1.2,
+      0.4498945668266858,
+      1046265
+    ],
+    [
+      1.22,
+      0.4501054331733142,
+      1064307
+    ],
+    [
+      1.24,
+      0.45040602988020995,
+      1082050
+    ],
+    [
+      1.26,
+      0.4506931670330656,
+      1099807
+    ],
+    [
+      1.28,
+      0.4509982502579748,
+      1117693
+    ],
+    [
+      1.3,
+      0.4512405222306968,
+      1135261
+    ],
+    [
+      1.32,
+      0.45156355152765937,
+      1153432
+    ],
+    [
+      1.34,
+      0.4517789043923011,
+      1171398
+    ],
+    [
+      1.36,
+      0.45203463591906323,
+      1189012
+    ],
+    [
+      1.38,
+      0.45223204271165146,
+      1206944
+    ],
+    [
+      1.4,
+      0.45249226075642696,
+      1224882
+    ],
+    [
+      1.42,
+      0.45273901924716226,
+      1242689
+    ],
+    [
+      1.44,
+      0.4530575620261115,
+      1260582
+    ],
+    [
+      1.46,
+      0.453403023913141,
+      1278594
+    ],
+    [
+      1.48,
+      0.453645295885863,
+      1296279
+    ],
+    [
+      1.5,
+      0.45387410830454483,
+      1314125
+    ],
+    [
+      1.52,
+      0.45417021849342726,
+      1331924
+    ],
+    [
+      1.54,
+      0.45445286912826954,
+      1349606
+    ],
+    [
+      1.56,
+      0.45482525012337927,
+      1367404
+    ],
+    [
+      1.58,
+      0.4550540625420611,
+      1385114
+    ],
+    [
+      1.6,
+      0.4554443896092243,
+      1402972
+    ],
+    [
+      1.62,
+      0.4557898514962538,
+      1420848
+    ],
+    [
+      1.64,
+      0.4560321234689757,
+      1438942
+    ],
+    [
+      1.66,
+      0.45643591009017903,
+      1456806
+    ],
+    [
+      1.68,
+      0.4567365067970748,
+      1474681
+    ],
+    [
+      1.7,
+      0.4569967248418502,
+      1492429
+    ],
+    [
+      1.72,
+      0.4572748889586792,
+      1510359
+    ],
+    [
+      1.74,
+      0.4576293238817354,
+      1528344
+    ],
+    [
+      1.76,
+      0.45803759702095204,
+      1546288
+    ],
+    [
+      1.78,
+      0.4583516532818879,
+      1564138
+    ],
+    [
+      1.8,
+      0.4586701960608372,
+      1582018
+    ],
+    [
+      1.82,
+      0.4590380905379335,
+      1599780
+    ],
+    [
+      1.84,
+      0.4593790659069496,
+      1617646
+    ],
+    [
+      1.86,
+      0.4597559334200727,
+      1635376
+    ],
+    [
+      1.88,
+      0.460159720041276,
+      1653089
+    ],
+    [
+      1.9,
+      0.46045583023015835,
+      1671032
+    ],
+    [
+      1.92,
+      0.4607384808650007,
+      1688966
+    ],
+    [
+      1.94,
+      0.4610749697160034,
+      1706642
+    ],
+    [
+      1.96,
+      0.46141145856700616,
+      1724631
+    ],
+    [
+      1.98,
+      0.4617928125981426,
+      1742517
+    ],
+    [
+      2.0,
+      0.46216519359325225,
+      1760500
+    ]
+  ],
+  "tiers": {
+    "T1": {
+      "competition": {
+        "orphaned_s1": 0,
+        "orphaned_chain_members": 0,
+        "orphaned_by_country": {
+          "india": 0,
+          "us": 0
+        },
+        "competing_s1": 2206821,
+        "pool_records_per_competing_s1": 4.676509331749154,
+        "sha256_orphaned_ids": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "populations": {
+        "SHADOW-DEV": {
+          "s1": 222890,
+          "lookalike_density": 0.3987706940643367,
+          "stage1_candidates_per_s1": 19.407559782852527,
+          "eligible_per_s1": 4.405648526178832,
+          "mean_claimants_per_eligible_pair": 1.489484966521551,
+          "contested_pair_share": 0.17119376766210953,
+          "s1_with_contested_candidate_share": 0.36603257212077706,
+          "country_share": {
+            "india": 0.3989636143389116,
+            "us": 0.6010363856610884
+          },
+          "hard_case_share(v1 flags)": {
+            "dense_pool(>=8 eligible candidates)": 0.05569563461797299,
+            "multiple_claimants(any candidate >=2)": 0.36603257212077706,
+            "record_address_empty(best candidate)": 0.009098658531114003,
+            "weak_name_strong_address(best)": 0.01502086230876217,
+            "strong_name_weak_address(best)": 0.00044416528332361256,
+            "collective_ambiguity(best peer sim<0.5, >=3 candidates)": 0.021840369689084302,
+            "low_margin(best-second<0.1, second>=0.5)": 0.8152631342814841,
+            "generic_name(S1 name_core shared by >=20 train S1)": 0.22286329579613262
+          },
+          "sha256_ids": "4713e47f308cadcec87b0f78b793f04fe49bc2e16ab4514e35479c7edc20d8f4"
+        },
+        "SHADOW-LOCKED-A": {
+          "s1": 111549,
+          "lookalike_density": 0.40079247684873914,
+          "stage1_candidates_per_s1": 19.405516858062377,
+          "eligible_per_s1": 4.402146142054164,
+          "mean_claimants_per_eligible_pair": 1.4938795043325086,
+          "contested_pair_share": 0.17154697538972213,
+          "s1_with_contested_candidate_share": 0.3660274856789393,
+          "country_share": {
+            "india": 0.40055043075240476,
+            "us": 0.5994495692475952
+          },
+          "hard_case_share(v1 flags)": {
+            "dense_pool(>=8 eligible candidates)": 0.05571542550807269,
+            "multiple_claimants(any candidate >=2)": 0.3660274856789393,
+            "record_address_empty(best candidate)": 0.008928811553666998,
+            "weak_name_strong_address(best)": 0.014836529238271971,
+            "strong_name_weak_address(best)": 0.0005199508736071143,
+            "collective_ambiguity(best peer sim<0.5, >=3 candidates)": 0.02168553729751051,
+            "low_margin(best-second<0.1, second>=0.5)": 0.8149961003684479,
+            "generic_name(S1 name_core shared by >=20 train S1)": 0.22185765896601495
+          },
+          "sha256_ids": "3ae2a999f04b72d18fdbe6d5f9f2c2dd0597f3c9062ec03cdd6fb2d627189891"
+        },
+        "SHADOW-LOCKED-B": {
+          "s1": 111882,
+          "lookalike_density": 0.39945657031515347,
+          "stage1_candidates_per_s1": 19.405453960422587,
+          "eligible_per_s1": 4.41209488568313,
+          "mean_claimants_per_eligible_pair": 1.4984603977845934,
+          "contested_pair_share": 0.1720910634194565,
+          "s1_with_contested_candidate_share": 0.3665200836595699,
+          "country_share": {
+            "india": 0.4002073613271125,
+            "us": 0.5997926386728875
+          },
+          "hard_case_share(v1 flags)": {
+            "dense_pool(>=8 eligible candidates)": 0.05601437228508607,
+            "multiple_claimants(any candidate >=2)": 0.3665200836595699,
+            "record_address_empty(best candidate)": 0.008598344684578395,
+            "weak_name_strong_address(best)": 0.013496362238787293,
+            "strong_name_weak_address(best)": 0.0004200854471675515,
+            "collective_ambiguity(best peer sim<0.5, >=3 candidates)": 0.020414365134695484,
+            "low_margin(best-second<0.1, second>=0.5)": 0.8142417904578038,
+            "generic_name(S1 name_core shared by >=20 train S1)": 0.2239323573050178
+          },
+          "sha256_ids": "652595ec68a913dfe5a9abaf95d6ad6d11da5b78bd35c993b56660c025bf757e"
+        }
+      },
+      "q": 0.0,
+      "target_density_dev": null,
+      "target_reached": true
+    },
+    "T2": {
+      "competition": {
+        "orphaned_s1": 450379,
+        "orphaned_chain_members": 450379,
+        "orphaned_by_country": {
+          "india": 195862,
+          "us": 254517
+        },
+        "competing_s1": 1756442,
+        "pool_records_per_competing_s1": 5.87563893370803,
+        "sha256_orphaned_ids": "275a06a68280b9827e92426ed9f217232eb8621fef7ba9386ab96f86c1fe01b1"
+      },
+      "populations": {
+        "SHADOW-DEV": {
+          "s1": 222890,
+          "lookalike_density": 0.4209475526044237,
+          "stage1_candidates_per_s1": 19.407559782852527,
+          "eligible_per_s1": 4.405648526178832,
+          "mean_claimants_per_eligible_pair": 1.3249074569108175,
+          "contested_pair_share": 0.14238244354489676,
+          "s1_with_contested_candidate_share": 0.3184171564448831,
+          "country_share": {
+            "india": 0.3989636143389116,
+            "us": 0.6010363856610884
+          },
+          "hard_case_share(v1 flags)": {
+            "dense_pool(>=8 eligible candidates)": 0.05569563461797299,
+            "multiple_claimants(any candidate >=2)": 0.36603257212077706,
+            "record_address_empty(best candidate)": 0.009098658531114003,
+            "weak_name_strong_address(best)": 0.01502086230876217,
+            "strong_name_weak_address(best)": 0.00044416528332361256,
+            "collective_ambiguity(best peer sim<0.5, >=3 candidates)": 0.021840369689084302,
+            "low_margin(best-second<0.1, second>=0.5)": 0.8152631342814841,
+            "generic_name(S1 name_core shared by >=20 train S1)": 0.22286329579613262
+          },
+          "sha256_ids": "4713e47f308cadcec87b0f78b793f04fe49bc2e16ab4514e35479c7edc20d8f4"
+        },
+        "SHADOW-LOCKED-A": {
+          "s1": 111549,
+          "lookalike_density": 0.4225318021676573,
+          "stage1_candidates_per_s1": 19.405516858062377,
+          "eligible_per_s1": 4.402146142054164,
+          "mean_claimants_per_eligible_pair": 1.3286678681614075,
+          "contested_pair_share": 0.14311024223355837,
+          "s1_with_contested_candidate_share": 0.3182188993177886,
+          "country_share": {
+            "india": 0.40055043075240476,
+            "us": 0.5994495692475952
+          },
+          "hard_case_share(v1 flags)": {
+            "dense_pool(>=8 eligible candidates)": 0.05571542550807269,
+            "multiple_claimants(any candidate >=2)": 0.3660274856789393,
+            "record_address_empty(best candidate)": 0.008928811553666998,
+            "weak_name_strong_address(best)": 0.014836529238271971,
+            "strong_name_weak_address(best)": 0.0005199508736071143,
+            "collective_ambiguity(best peer sim<0.5, >=3 candidates)": 0.02168553729751051,
+            "low_margin(best-second<0.1, second>=0.5)": 0.8149961003684479,
+            "generic_name(S1 name_core shared by >=20 train S1)": 0.22185765896601495
+          },
+          "sha256_ids": "3ae2a999f04b72d18fdbe6d5f9f2c2dd0597f3c9062ec03cdd6fb2d627189891"
+        },
+        "SHADOW-LOCKED-B": {
+          "s1": 111882,
+          "lookalike_density": 0.4224629520387551,
+          "stage1_candidates_per_s1": 19.405453960422587,
+          "eligible_per_s1": 4.41209488568313,
+          "mean_claimants_per_eligible_pair": 1.3315148470324167,
+          "contested_pair_share": 0.1434483848357285,
+          "s1_with_contested_candidate_share": 0.3190683041061118,
+          "country_share": {
+            "india": 0.4002073613271125,
+            "us": 0.5997926386728875
+          },
+          "hard_case_share(v1 flags)": {
+            "dense_pool(>=8 eligible candidates)": 0.05601437228508607,
+            "multiple_claimants(any candidate >=2)": 0.3665200836595699,
+            "record_address_empty(best candidate)": 0.008598344684578395,
+            "weak_name_strong_address(best)": 0.013496362238787293,
+            "strong_name_weak_address(best)": 0.0004200854471675515,
+            "collective_ambiguity(best peer sim<0.5, >=3 candidates)": 0.020414365134695484,
+            "low_margin(best-second<0.1, second>=0.5)": 0.8142417904578038,
+            "generic_name(S1 name_core shared by >=20 train S1)": 0.2239323573050178
+          },
+          "sha256_ids": "652595ec68a913dfe5a9abaf95d6ad6d11da5b78bd35c993b56660c025bf757e"
+        }
+      },
+      "q": 0.52,
+      "target_density_dev": 0.41990219390730854,
+      "target_reached": true
+    },
+    "T3": {
+      "competition": {
+        "orphaned_s1": 797903,
+        "orphaned_chain_members": 797903,
+        "orphaned_by_country": {
+          "india": 347132,
+          "us": 450771
+        },
+        "competing_s1": 1408918,
+        "pool_records_per_competing_s1": 7.324925226308415,
+        "sha256_orphaned_ids": "192cd98ccfc7b81e0fb9ccaa74848f7c3e7a83a310ad0c7dd9c9c60c05ef779f"
+      },
+      "populations": {
+        "SHADOW-DEV": {
+          "s1": 222890,
+          "lookalike_density": 0.4420162411952084,
+          "stage1_candidates_per_s1": 19.407559782852527,
+          "eligible_per_s1": 4.405648526178832,
+          "mean_claimants_per_eligible_pair": 1.1993258484177296,
+          "contested_pair_share": 0.11389291988085236,
+          "s1_with_contested_candidate_share": 0.26353806810534347,
+          "country_share": {
+            "india": 0.3989636143389116,
+            "us": 0.6010363856610884
+          },
+          "hard_case_share(v1 flags)": {
+            "dense_pool(>=8 eligible candidates)": 0.05569563461797299,
+            "multiple_claimants(any candidate >=2)": 0.36603257212077706,
+            "record_address_empty(best candidate)": 0.009098658531114003,
+            "weak_name_strong_address(best)": 0.01502086230876217,
+            "strong_name_weak_address(best)": 0.00044416528332361256,
+            "collective_ambiguity(best peer sim<0.5, >=3 candidates)": 0.021840369689084302,
+            "low_margin(best-second<0.1, second>=0.5)": 0.8152631342814841,
+            "generic_name(S1 name_core shared by >=20 train S1)": 0.22286329579613262
+          },
+          "sha256_ids": "4713e47f308cadcec87b0f78b793f04fe49bc2e16ab4514e35479c7edc20d8f4"
+        },
+        "SHADOW-LOCKED-A": {
+          "s1": 111549,
+          "lookalike_density": 0.44468350231736725,
+          "stage1_candidates_per_s1": 19.405516858062377,
+          "eligible_per_s1": 4.402146142054164,
+          "mean_claimants_per_eligible_pair": 1.2007270061398418,
+          "contested_pair_share": 0.11430491492806305,
+          "s1_with_contested_candidate_share": 0.26336408215223805,
+          "country_share": {
+            "india": 0.40055043075240476,
+            "us": 0.5994495692475952
+          },
+          "hard_case_share(v1 flags)": {
+            "dense_pool(>=8 eligible candidates)": 0.05571542550807269,
+            "multiple_claimants(any candidate >=2)": 0.3660274856789393,
+            "record_address_empty(best candidate)": 0.008928811553666998,
+            "weak_name_strong_address(best)": 0.014836529238271971,
+            "strong_name_weak_address(best)": 0.0005199508736071143,
+            "collective_ambiguity(best peer sim<0.5, >=3 candidates)": 0.02168553729751051,
+            "low_margin(best-second<0.1, second>=0.5)": 0.8149961003684479,
+            "generic_name(S1 name_core shared by >=20 train S1)": 0.22185765896601495
+          },
+          "sha256_ids": "3ae2a999f04b72d18fdbe6d5f9f2c2dd0597f3c9062ec03cdd6fb2d627189891"
+        },
+        "SHADOW-LOCKED-B": {
+          "s1": 111882,
+          "lookalike_density": 0.44367279812659766,
+          "stage1_candidates_per_s1": 19.405453960422587,
+          "eligible_per_s1": 4.41209488568313,
+          "mean_claimants_per_eligible_pair": 1.2021578740524357,
+          "contested_pair_share": 0.11458894646641034,
+          "s1_with_contested_candidate_share": 0.2635991491035198,
+          "country_share": {
+            "india": 0.4002073613271125,
+            "us": 0.5997926386728875
+          },
+          "hard_case_share(v1 flags)": {
+            "dense_pool(>=8 eligible candidates)": 0.05601437228508607,
+            "multiple_claimants(any candidate >=2)": 0.3665200836595699,
+            "record_address_empty(best candidate)": 0.008598344684578395,
+            "weak_name_strong_address(best)": 0.013496362238787293,
+            "strong_name_weak_address(best)": 0.0004200854471675515,
+            "collective_ambiguity(best peer sim<0.5, >=3 candidates)": 0.020414365134695484,
+            "low_margin(best-second<0.1, second>=0.5)": 0.8142417904578038,
+            "generic_name(S1 name_core shared by >=20 train S1)": 0.2239323573050178
+          },
+          "sha256_ids": "652595ec68a913dfe5a9abaf95d6ad6d11da5b78bd35c993b56660c025bf757e"
+        }
+      },
+      "q": 0.92,
+      "target_density_dev": 0.4410336937502804,
+      "target_reached": true
+    },
+    "T4": {
+      "competition": {
+        "orphaned_s1": 1760500,
+        "orphaned_chain_members": 867580,
+        "orphaned_by_country": {
+          "india": 704806,
+          "us": 1055694
+        },
+        "competing_s1": 446321,
+        "pool_records_per_competing_s1": 23.122862244886527,
+        "sha256_orphaned_ids": "a7d159a519e6644498f7914b7a548de4d241c22419ec42694fe649f9ae38955b"
+      },
+      "populations": {
+        "SHADOW-DEV": {
+          "s1": 222890,
+          "lookalike_density": 0.46216519359325225,
+          "stage1_candidates_per_s1": 19.407559782852527,
+          "eligible_per_s1": 4.405648526178832,
+          "mean_claimants_per_eligible_pair": 1.09889864813259,
+          "contested_pair_share": 0.057678657806970644,
+          "s1_with_contested_candidate_share": 0.15370362062003678,
+          "country_share": {
+            "india": 0.3989636143389116,
+            "us": 0.6010363856610884
+          },
+          "hard_case_share(v1 flags)": {
+            "dense_pool(>=8 eligible candidates)": 0.05569563461797299,
+            "multiple_claimants(any candidate >=2)": 0.36603257212077706,
+            "record_address_empty(best candidate)": 0.009098658531114003,
+            "weak_name_strong_address(best)": 0.01502086230876217,
+            "strong_name_weak_address(best)": 0.00044416528332361256,
+            "collective_ambiguity(best peer sim<0.5, >=3 candidates)": 0.021840369689084302,
+            "low_margin(best-second<0.1, second>=0.5)": 0.8152631342814841,
+            "generic_name(S1 name_core shared by >=20 train S1)": 0.22286329579613262
+          },
+          "sha256_ids": "4713e47f308cadcec87b0f78b793f04fe49bc2e16ab4514e35479c7edc20d8f4"
+        },
+        "SHADOW-LOCKED-A": {
+          "s1": 111549,
+          "lookalike_density": 0.464136836726461,
+          "stage1_candidates_per_s1": 19.405516858062377,
+          "eligible_per_s1": 4.402146142054164,
+          "mean_claimants_per_eligible_pair": 1.0998197757888628,
+          "contested_pair_share": 0.057956848010915274,
+          "s1_with_contested_candidate_share": 0.15390545858770585,
+          "country_share": {
+            "india": 0.40055043075240476,
+            "us": 0.5994495692475952
+          },
+          "hard_case_share(v1 flags)": {
+            "dense_pool(>=8 eligible candidates)": 0.05571542550807269,
+            "multiple_claimants(any candidate >=2)": 0.3660274856789393,
+            "record_address_empty(best candidate)": 0.008928811553666998,
+            "weak_name_strong_address(best)": 0.014836529238271971,
+            "strong_name_weak_address(best)": 0.0005199508736071143,
+            "collective_ambiguity(best peer sim<0.5, >=3 candidates)": 0.02168553729751051,
+            "low_margin(best-second<0.1, second>=0.5)": 0.8149961003684479,
+            "generic_name(S1 name_core shared by >=20 train S1)": 0.22185765896601495
+          },
+          "sha256_ids": "3ae2a999f04b72d18fdbe6d5f9f2c2dd0597f3c9062ec03cdd6fb2d627189891"
+        },
+        "SHADOW-LOCKED-B": {
+          "s1": 111882,
+          "lookalike_density": 0.46507034196742997,
+          "stage1_candidates_per_s1": 19.405453960422587,
+          "eligible_per_s1": 4.41209488568313,
+          "mean_claimants_per_eligible_pair": 1.1006879590952001,
+          "contested_pair_share": 0.05841372352795796,
+          "s1_with_contested_candidate_share": 0.15472551438122306,
+          "country_share": {
+            "india": 0.4002073613271125,
+            "us": 0.5997926386728875
+          },
+          "hard_case_share(v1 flags)": {
+            "dense_pool(>=8 eligible candidates)": 0.05601437228508607,
+            "multiple_claimants(any candidate >=2)": 0.3665200836595699,
+            "record_address_empty(best candidate)": 0.008598344684578395,
+            "weak_name_strong_address(best)": 0.013496362238787293,
+            "strong_name_weak_address(best)": 0.0004200854471675515,
+            "collective_ambiguity(best peer sim<0.5, >=3 candidates)": 0.020414365134695484,
+            "low_margin(best-second<0.1, second>=0.5)": 0.8142417904578038,
+            "generic_name(S1 name_core shared by >=20 train S1)": 0.2239323573050178
+          },
+          "sha256_ids": "652595ec68a913dfe5a9abaf95d6ad6d11da5b78bd35c993b56660c025bf757e"
+        }
+      },
+      "q": 2.0,
+      "target_density_dev": 0.7062504617487348,
+      "target_reached": false
+    }
+  },
+  "test_reference(label-free)": {
+    "s1": 1732544,
+    "lookalike_density": 0.7062504617487348,
+    "stage1_candidates_per_s1": 19.329564501680764,
+    "eligible_per_s1": 5.043051143289867,
+    "mean_claimants_per_eligible_pair": 1.5004958048863564,
+    "contested_pair_share": 0.15894426521303814,
+    "pool_records_per_s1": 5.754306384138007,
+    "country_share": {
+      "france": 0.14975204092940786,
+      "india": 0.4675125133907133,
+      "us": 0.3827354456798788
+    }
+  },
+  "never_used_for": [
+    "stage-1 training",
+    "stage-2 training",
+    "transliteration learning",
+    "threshold selection",
+    "early stopping",
+    "feature engineering",
+    "tier construction (label-free only)"
+  ],
+  "caveats": [
+    "SHADOW-BASE (hence DEV and both LOCKED sets) lies inside E half B, used as an aggregate gate for B-07/B-06/S-01.",
+    "The EXP-S-02 veto was chosen (POST-S01-FORENSIC) from aggregate SHADOW-BASE metrics: the LOCKED sets are not fresh for EXP-S-02; they are fresh for experiments frozen after 2026-09-27.",
+    "Orphaning can only make existing candidates uncontested; it cannot add candidates to an S1's list."
+  ]
+}

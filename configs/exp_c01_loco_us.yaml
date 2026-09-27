@@ -1,0 +1,28 @@
+# EXP-C-01: leave-one-country-out DIAGNOSTIC (not a production candidate). Same blocker, features, map and
+# LightGBM settings as EXP-B-06; the stage-1 model is trained on 200k S1 of country "us" ONLY
+# (size-controlled vs EXP-B-06's 200k mixed). Validation scoring reports in-domain (us) and
+# out-of-domain (the other labelled country) metrics -- a proxy for transfer to an unseen country (France).
+# The cross-script map is pinned to the EXP-B-06 fit-set map so that only MODEL transfer is measured.
+inherit: exp_b06_name_pair.yaml
+
+experiment:
+  id: EXP-C-01
+
+paths:
+  output_dir: experiments/runs/EXP-C-01/output
+
+xlit:
+  map_path: experiments/runs/EXP-B-06/xlit_map.json
+
+fit:
+  only_countries: [us]
+  max_train_s1: 200000
+  reuse_fit_parts: null
+
+scoring:
+  tag: scored_EXP-C-01
+  eval_source_tag: null
+
+matcher:
+  type: lightgbm
+  model_path: null

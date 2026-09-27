@@ -1,0 +1,38 @@
+# EXP-S-01: collective second-stage decision model on top of the frozen EXP-B-06 stage-1 system.
+# ONE change vs the control (EXP-B-06 + D-01 at t 0.67): the final accept decision for retrieved
+# pairs (stage-1 score >= 0.02) is made by a second LightGBM using stage-1 score + S1 context +
+# record (claimant) context + collective record-to-record peer similarity (top-3 other candidates).
+# Candidate generation, stage-1 model and candidate_pairs.tsv are UNCHANGED (read-only re-use).
+# Training data: E half A minus frozen validation only (see src/ber/pipeline/run_stage2.py).
+inherit: exp_b06_name_pair.yaml
+
+experiment:
+  id: EXP-S-01
+  allowed_stages: [submit]      # run_baseline guard: stage 1 is frozen; use ber.pipeline.run_stage2
+
+paths:
+  output_dir: experiments/runs/EXP-S-01/output   # never the production output/ folder
+
+scoring:
+  tag: scored_EXP-B-06          # stage-1 TEST scored parts (read-only)
+  eval_source_tag: scored_EXP-B-06
+
+matcher:
+  type: lightgbm
+  model_path: experiments/runs/EXP-B-06/model.json   # frozen stage-1 model (threshold 0.67 = control)
+
+stage2:
+  stage1_run: EXP-B-06
+  train_tag: forensic_alltrain_B06          # stage-1 scores of ALL train S1 (full competition)
+  xlit_map: experiments/runs/EXP-B-06/xlit_map.json   # the stage-1 cross-script map (fit-set learned)
+  min_score: 0.02
+  peers: 3
+  inner_fraction: 0.2           # hash split of the stage-2 training partition: early stopping + decision rule
+  chunk_pairs: 1500000
+  workers: 8
+  thresholds: {start: 0.30, stop: 0.90, step: 0.01}
+  lightgbm:
+    num_boost_round: 2000
+    early_stopping_rounds: 50
+    params: {learning_rate: 0.05, num_leaves: 63, min_data_in_leaf: 200, feature_fraction: 0.9,
+             bagging_fraction: 0.8, bagging_freq: 1, lambda_l2: 1.0, seed: 42, num_threads: 8}

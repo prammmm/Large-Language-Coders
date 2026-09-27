@@ -33,11 +33,99 @@ Every run writes `experiments/runs/<ID>/{config.yaml,metrics.json,notes.md}` (th
 | EXP-B-05 | A wider address-word window (3 → 5) for name_addr / addr_pair recovers missed India pairs; model retrained; D-01 on top | `max_words` 3 → 5 (config only) + LightGBM refit (threshold 0.62) | 0.9324 (E, full competition + D-01; control 0.9313) | 0.9813 ↓ | 0.8636 | 0.9285 | 19.6 | — | **Rejected** (+0.0010, of which the blocker is ~+0.0005; P −0.0027) |
 | **EXP-N-02** | A cross-script name view learned only from train true pairs recovers and correctly scores India script-mismatch pairs | Train-learned token map → `name_xlit` view for the name keys + 2 similarity features; LightGBM refit (cross-fitted maps); D-01 on top | **0.9402** (E, full competition + D-01; control 0.9313) | **0.9864** | 0.8702 | 0.9328 | 19.3 | **0.928** (Submission 6) | **KEEP**: current best |
 | EXP-N-03 | Indic legal-form words (learned) dropped from the cross-script view make generic cross-script names exact | legal-form stage of the learned map + refit; D-01 | 0.9413 (E; control N-02 + D-01 0.9402) | 0.9859 | 0.8735 | 0.9348 | 19.3 | — | Below gate (+0.0010); kept only as the base for B-06/B-07 |
+| **EXP-B-07** | Exact name × address word finds generic names whose exact-name block exceeds the cap | `exact_core.with_addr_words` key + refit; threshold 0.67 (precision-first rule on the tuning set E half A minus validation) | **0.9464** (E; N-02 + D-01 0.9402) | 0.9864 | 0.8815 | 0.9448 | 19.3 | pending | **KEEP** |
+| **EXP-B-06** | A name-token-pair key finds name-only records | `name_token.pair` key on B-07 + refit (t 0.67) | **0.9471** (E) | 0.9863 | 0.8832 | 0.9487 | 19.4 | pending | **KEEP**: best local (+0.0007 over B-07) |
+| **EXP-S-01** | Pairs are decided in isolation; a second-stage model with S1/record context and COLLECTIVE record-to-record peer similarity decides better | 2nd-stage LightGBM on B-06 stage-1 pairs (score ≥ 0.02), trained on E half A minus validation only; decision threshold+D-01 @ 0.65 chosen on an inner split | **0.9596 (E half B)**, 0.9601 (validation); control B-06 0.9471 / 0.9470 | 0.9875 (E-B) | 0.9162 | 0.9487 (unchanged) | 19.4 | **≈0.920** (team-reported; best pre-S-01 file 0.935, B-07 t0.67 or B-06, unattributed) | **Public regression**: see POST-S01-FORENSIC |
+| EXP-S-01b | Count/position context features may not transfer to the denser test pool | S-01 minus 7 count-dependent features | 0.9591 (E-B), 0.9595 (val) | 0.9875 | 0.9148 | 0.9487 | 19.4 | — | Validated alternative; not selected (pre-declared rule: test inflation not clearly lower) |
+| EXP-C-01 / C-02 (diagnostic) | How much does an unseen country lose? | Stage 1 trained on one labelled country only (200k, size-controlled) | India (unseen) 0.8609 vs 0.9358; US (unseen) 0.9108 vs 0.9493 | India 0.883 / US 0.944 | — | same | — | — | Diagnostic: transfer loss is mostly precision |
+| EXP-C-03 (diagnostic) | Does stage 2 help or hurt an unseen country? | Stage 2 trained on US only on top of C-01 | India (unseen) E-B 0.8724 → 0.8932 (+0.0208) | 0.8981 → 0.9133 | — | same | — | — | Diagnostic: stage 2 improves unseen-country precision |
+| **EXP-S-02** | S-01's removals transfer, its additions do not: a veto-only stage 2 gives a density-robust gain | final = (B-06 + D-01) AND S-01 (`stage2.add_floor: .inf`); no retraining; S-01 model/features read-only | **0.9499** (E half B; control 0.9471), 0.9499 (val), GATE-B 0.9499 | 0.9917 | 0.8800 | 0.9487 (unchanged) | 19.4 | not submitted | **KEEP** (all pre-declared gates; advantage +0.0023 to +0.0027 on every density tier incl. test density; `experiments/runs/EXP-S-02/final_report.md`) |
+| POST-S01-FORENSIC (diagnostic) | Why did S-01 drop from local ≈ 0.96 to public ≈ 0.920? | No production change: submission check, B-06 → S-01 test flips, PSI shift, D-01 variants, a shadow benchmark (Base / Test-Matched / Chain-orphaned), a stage-1 floor sweep | Shadow-Base S-01 0.9596 vs B-06 0.9472; the S-01 advantage shrinks +0.0124 → +0.0079 as look-alike density rises 0.399 → 0.433 (test 0.706) | S-01 P 0.9875 → 0.9792 (Chain members) | — | same | — | — | Cause: context-driven additions on uncontested look-alike records (test 2.14× train rate). Proposed EXP-S-02 (veto only), not implemented |
 | EXP-B-04-k30 | Same blocker, top-K 30 | K 20 → 30 (own refit) | 0.9289 (+0.0015) | 0.9770 | 0.8618 | 0.9339 | 27.8 | — | Not selected (+45% candidates for +0.0015) |
 | EXP-D-03 (probe) | More trees help | 3,000 rounds (dev 50k) | 0.9027 (+0.0006) | 0.9778 | 0.8091 | 0.8597 | 16.1 | — | Rejected (capacity not a lever) |
 | EXP-D-02 (probe) | A non-linear scorer beats LR on the same features/protocol | MLP 22→64→32→1 (diagnostic, torch) | 0.8870–0.8903 (3 seeds) | 0.968–0.973 | 0.788–0.791 | 0.8597 | 16.1 | — | Evidence for EXP-M-03 (not adopted) |
 
 ## Detailed entries
+
+### EXP-S-02 — Stage 2 as a veto only + shadow benchmark v2 (2026-09-27)
+- **Hypothesis:** S-01's removals are pair-level corrections that transfer; its additions are what break under the test's look-alike regime.
+- **Change (one):** final = control (B-06 + D-01 @ 0.67) AND S-01. No retraining; S-01 model, features and threshold reused read-only.
+- **Local result [M]:**
+  - validation 0.9470 → **0.9499**, GATE-B 0.9471 → 0.9499, E half B 0.9471 → 0.9499;
+  - precision 0.986 → 0.992; false merges −43%; singleton FP −37%;
+  - India +0.004, US +0.002; 0 additions.
+- **Shadow benchmark v2** (DEV / LOCKED-A / LOCKED-B + density tiers):
+  - Orphaning reaches look-alike density only 0.462 (test 0.706). The test excess is in the candidate lists (1.5× weak candidates, 1.2× peer-similar), not in claimants (contested share 15.9% vs 17.1%).
+  - Weighted tiers T1W / T4W reach 0.706.
+  - S-02's advantage: +0.0027 (T1) → +0.0025 (T4) → +0.0024 / +0.0023 (T1W / T4W), with no material decay.
+  - S-01's advantage: +0.0125 → −0.0002 at T4 (the tiers reproduce the public inversion), with false merges 36.8 → 120.4 per 1k.
+- **Test behaviour [D]:** −0.86% predictions (France −0.84%, India −1.13%, US −0.53%); 0 additions; test/train removals 0.94.
+- **Engineering:**
+  - Submit memory breach (5.15 GB) found by a trace and fixed (3.59 GB), output byte-identical.
+  - `add_floor=null` reproduces the S-01 bytes on real data.
+  - 191 tests.
+- **Decision: KEEP** (not submitted).
+- **Next (proposed, not implemented):** EXP-B-08, top-K 20 → 30. Largest post-S-02 bucket: never-retrieved true pairs, oracle +0.0198; about 35% of them sit at ranks > 20.
+
+### POST-S01-FORENSIC — Public regression of EXP-S-01 (diagnostic, 2026-09-27)
+- **Question:** why S-01 (E half B 0.9596, validation 0.9601) scored ≈ 0.920 publicly, vs 0.935 for the best pre-S-01 file.
+- **Full report:** `experiments/runs/POST-S01-FORENSIC/forensic_report.md`. Shadow benchmark: `experiments/shadow_tests/`.
+- **Measured:**
+  - The submitted files are byte-identical to the validated S-01 output.
+  - Test predictions per S1 rose +9.3% (train E-B +3.9%). Test additions were 0.316 per S1 vs 0.148 on train (2.14×); removals were 0.027 vs 0.028 (1:1).
+  - Test additions have stage-1 median 0.300 (train 0.427) and are on uncontested records (mean claimants 1.04).
+  - Only `s1_n_cand` shifts moderately (PSI 0.118).
+  - D-01 variants A–D are identical in count.
+  - France has the smallest rise.
+  - Test has 1.77× more weak, uncontested, peer-similar candidates per S1 (0.706 vs 0.399; train truth rate in that group 16.6%).
+  - Shadow sets: S-01's advantage over B-06 falls monotonically with look-alike density (+0.0124 → +0.0079), and S-01's false merges rise faster (36.9 → 65.8 vs 39.8 → 44.8 per 1k S1). No simulation reaches the test's density.
+  - A stage-1 floor sweep: every addition floor keeps a negative density slope. **Removals only (veto)** is density-invariant (+0.0027 / +0.0026 / +0.0027).
+- **Interpretation:** the regression is a joint concept shift (outcome G, with parts of A and C). S-01 turns weak pair evidence into matches using "uncontested + looks like the S1's other records". Test contains far more look-alike distractor records, so that evidence is much less reliable there.
+- **Decision:** no production change and no submission. Proposed EXP-S-02 (S-01 as a veto on B-06 + D-01, `stage2.add_floor: .inf`), not implemented and awaiting approval.
+
+### EXP-S-01 — Collective second-stage decision model (FINAL candidate)
+- **Hypothesis:** After B-06, most remaining loss is in the decision (retrieved true pairs scored low: +0.023 oracle; false merges +0.016), because the stage-1 matcher scores each (S1, record) pair in isolation. A second stage that sees the S1's other candidates, the record's other claimants, and whether the record resembles the S1's other strong records decides better.
+- **Control:** EXP-B-06 + D-01 @ 0.67 (verified: E 0.94706, P 0.98630).
+- **Change (one):** a second LightGBM re-decides every retrieved pair with stage-1 score ≥ 0.02 using 41 label-free, country-agnostic features:
+  - stage-1 score;
+  - S1 context: rank, count, relative position, best, 2nd best, gap, # ≥ 0.5, # ≥ 0.8;
+  - record context: claimants, best/2nd best claimant, rank, gap to the best other claimant, is-best;
+  - collective: for the top-3 OTHER candidates of the same S1 (never itself), record-to-record name Jaccard, cross-script name Jaccard, name token-set, address token-set, number Jaccard (zero-stripped), useful-word Jaccard, and the peer's score; plus peer count, max, score-weighted mean and best-peer similarity.
+- **Unchanged:** candidates and stage 1. Final decision = stage-2 probability ≥ 0.65, then best claimant per record (D-01) — both chosen on an inner split of the training partition.
+- **Training (no leakage, guards raise):** E half A minus frozen validation only (714,270 train S1 + 178,824 inner S1). Stage-1 scores out-of-sample. All train S1 compete when features are built.
+- **Result (held-out):**
+  - E half B 0.9471 → **0.9596** (+0.0125), P 0.9863 → 0.9875, R 0.8832 → 0.9162;
+  - validation 0.9470 → **0.9601** (+0.0131); validation halves +0.0133 / +0.0128;
+  - India +0.0134, US +0.0119 (E-B);
+  - false merges −8.5%, singleton FP −18% (E-B);
+  - 148k pairs added (90.6% true), 28k removed (38.6% true).
+- **Robustness:**
+  - the test feature distribution shifts (denser pool);
+  - test acceptance rises 9.3% vs control (4.0% expected from train within-bin behaviour) — unexplained excess +5.3%, not caused by count features (S-01b removes only 8% of it);
+  - the leave-one-country-out stage-2 diagnostic (C-03) shows stage 2 improves an UNSEEN country by +0.021 (precision +0.015).
+- **Decision:** **KEEP — final system.** Output `experiments/runs/EXP-S-01/output/` (strict + official `--check-ids` PASS; deterministic re-run byte-identical).
+- **Public (team-reported): ≈ 0.920**, below the best pre-S-01 file (0.935). Diagnosed in POST-S01-FORENSIC (above). The "+5.3% unexplained excess" noted under Robustness was the warning sign.
+
+### EXP-C-01 / C-02 / C-03 — Leave-one-country-out diagnostics
+- **C-01 (US-only stage 1, 200k):** India val 0.8609 (P 0.8830) vs B-06 0.9358 (P 0.9773); false merges ×5.5; at the validation-optimal threshold only 0.8794.
+- **C-02 (India-only):** US val 0.9108 (P 0.9440) vs 0.9493 (P 0.9843).
+- **C-03 (stage 2 on top of C-01, trained on US only):** India E-B 0.8724 → 0.8932, P 0.8981 → 0.9133; US +0.0101.
+- **Interpretation:** an unseen country loses 0.04–0.075 F0.5, mostly precision. This is consistent with the France estimate. The US-only model over-relies on `name_ratio × addr_token_set` (56% gain), whose meaning changes with address length; `cheap_score` is not the cause. Stage 2's relative/collective features reduce the loss.
+- **Label-free France check:** French S1 write "saint" (10.0%) where 1.7% of French pool records write "st", which normalizes to "street". Bounded; no production change (no French labels, no country rules).
+
+### EXP-B-07 / EXP-B-06 — Name-driven retrieval keys (on N-03, with D-01)
+- **B-07 hypothesis:** N-03's unreachable cross-script pairs have identical but generic names (the exact-name block exceeds cap 50) and share the city. A key on (exact sorted name view × each useful address word) makes the block small again.
+- **B-07 blocking:** recall@20 0.9348 → 0.9448 (India +0.0237); unreachable cross-script pairs 7,390 → 516; candidates +0.3%.
+- **B-07 threshold:** with D-01 the curve is flat (0.60–0.67 → 0.9464–0.9468). A precision-first rule on the tuning set (E half A minus validation; the lowest threshold with tuning precision ≥ the control's) picks 0.67. Held-out: E half B 0.9465 / P 0.9863; validation 0.9465 / P 0.9864.
+- **B-07 result (E, D-01, t 0.67):** 0.9402 → **0.9464**; P 0.9864 → 0.9864; India +0.0149; singleton FP −49; halves agree.
+- **B-06 hypothesis:** name-only records (empty or useless addresses) need a name-pair key.
+- **B-06 blocking:** recall@20 0.9448 → 0.9487 (US +0.0029).
+- **B-06 result (E, D-01, t 0.67 from the inner split):** **0.9471** (P 0.9863); +0.0068 vs N-02 (halves +0.0066 to +0.0068); +0.0007 vs B-07.
+- **Decision:** both KEEP (gate vs N-02). B-06 is the best local system. Outputs:
+  - `experiments/runs/EXP-B-07/output_t067/`;
+  - `experiments/runs/EXP-B-06/output/`.
+  Both pass strict and official `--check-ids` validation.
+- **Probes (diagnostic, held-out):** a second-stage decision model on B-07 scores gives +0.0017 with context features only, and **+0.0048 with collective (record-to-record) features** (20% sample). This leads to the proposed EXP-S-01 (`reports/RESEARCH_REVIEW_2026-09-26.md`).
 
 ### EXP-N-03 — Learned Indic legal-form words dropped from the cross-script view
 - **Hypothesis:** Unmapped Indic legal-form words ("private limited") keep cross-script names from matching the S1 core exactly (only 12% did).

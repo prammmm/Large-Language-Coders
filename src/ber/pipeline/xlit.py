@@ -122,6 +122,9 @@ def ensure_final_map(cfg: dict, paths: Paths) -> XlitMap:
     """The map used for validation / E / test scoring: learned from the fit S1 set only."""
     from ber.pipeline.run_baseline import fit_s1_subset
 
+    pinned = xlit_cfg(cfg).get("map_path")
+    if pinned:  # diagnostic: evaluate with a fixed, already fit-set-learned map (e.g. leave-one-country-out)
+        return XlitMap.load(Path(pinned))
     fit_ids = fit_s1_subset(cfg, paths)
     path = final_map_path(cfg, paths)
     if path.exists():

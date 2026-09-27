@@ -210,6 +210,47 @@ Status: Proposed
 
 ---
 
+## DEC-021 — Stage 2 restricted to a veto (EXP-S-02); shadow benchmark v2 for public-transfer checks
+
+Date: 2026-09-27
+
+Context: S-01 scored about 0.920 publicly, vs 0.935 before it. POST-S01-FORENSIC traced the drop to context-driven additions on weak, uncontested, look-alike candidates, which are 1.77× denser on test.
+
+Decision (proposed):
+- Final matches = (B-06 + D-01 @ 0.67) AND S-01, via `stage2.add_floor: .inf`. `null` keeps the S-01 behaviour.
+- Future decision-layer experiments must also pass the v2 density-tier gate (`experiments/shadow_tests/v2/`): no material decay of the advantage over T1 → T4 / T1W / T4W on DEV and on both LOCKED sets.
+- LOCKED-A/B are evaluated once, after an experiment is frozen.
+
+Evidence: EXP-S-02 local +0.0028 to +0.0029 (validation / GATE-B / E half B). On every density tier including test density, the advantage is +0.0023 to +0.0027, while S-01's falls to −0.0002. All gates pass (`experiments/runs/EXP-S-02/final_report.md`).
+
+Trade-offs: gives up S-01's ≈ +0.010 local recall gain from additions, which does not transfer. The tiers reach test density only through reweighting, and are calibrated on one public point.
+
+Status: Proposed (not submitted; the team decides)
+
+---
+
+## DEC-020 — Collective second-stage decision model (EXP-S-01)
+
+Date: 2026-09-27
+
+Context: After retrieval work (B-07/B-06; blocking recall 0.9487, oracle 0.9832), most remaining loss is in the per-pair decision. Probes showed context-only features give +0.002 held-out, and collective features give +0.005 (on a 20% sample).
+
+Decision (proposed):
+- Final matches are decided by a second LightGBM on stage-1 pairs (score ≥ 0.02) using S1 context, record-claimant context and record-to-record collective similarity to the S1's top-3 other candidates.
+- Threshold 0.65 + best claimant (D-01) — chosen on an inner split of the training partition.
+- Stage 1, candidates and `candidate_pairs.tsv` are unchanged.
+- Stage 2 is trained only on E half A minus frozen validation, from out-of-sample stage-1 scores. Stage-2 training requires the stage-1 all-train scores (`scripts/analysis/full_competition.py`).
+
+Evidence: E half B +0.0125, validation +0.0131, precision up, all halves agree; an unseen country (LOCO C-03) improves +0.021.
+
+Trade-offs:
+- Two models and an extra feature pass (≈ 8 min train, 7 min test).
+- Test acceptance rises more than on train (+5.3% unexplained; direction unknown without labels).
+
+Status: Proposed. Awaiting human review.
+
+---
+
 ## DEC-019 — Train-pair-learned cross-script name view (EXP-N-02)
 
 Date: 2026-09-26

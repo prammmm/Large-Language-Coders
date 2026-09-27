@@ -1,0 +1,55 @@
+{
+  "seed": 42,
+  "definitions": "Shadow benchmark (POST-S-01 forensics): held-out labelled train S1 that never enter any training,\nmap learning, threshold / early-stopping / rule selection, used to judge public-transfer risk.\n\nDefinitions (all deterministic, seed 42):\n  SHADOW-BASE          E half B  AND  u(\"shadow\") < 0.5         (E = train S1 not in the stage-1 fit set)\n  GATE-B (the rest)    E half B  AND  NOT shadow                 (keeps an ordinary held-out gate set)\n  ORPHANED competition  u(\"orphan\") < orphan_frac over ALL train S1: those S1 are removed from the\n                        competition, so their true S2/S3 records stay in the pool as unclaimed \"orphan\n                        entities\" -- the observed test condition (denser pool, same confident matches per S1)\n  SHADOW-TEST-MATCHED  shadow S1 not orphaned, evaluated in the orphaned competition, re-weighted so that\n                        (country, eligible-candidate-count bin) matches the labelled test countries\n  SHADOW-HARD          shadow S1 with at least one measured hard property (see hard_flags)\nwhere u(salt) = uniform[0,1) from sha1(f\"{salt}|{seed}|{s1_id}\").\n",
+  "SHADOW-BASE": {
+    "s1": 446321,
+    "sha256_ids": "20227e442914bd628de68fac9760caf53af0bfc597116da61fb8b29ce744b4e5",
+    "file": "experiments\\shadow_tests\\shadow_base_s1_ids.txt",
+    "by_country": {
+      "india": 178382,
+      "us": 267939
+    }
+  },
+  "GATE-B (E half B minus shadow; ordinary gate set from now on)": {
+    "s1": 557023
+  },
+  "ORPHANED competition": {
+    "orphan_fraction": 0.18730268783738158,
+    "train_pool": 10320219,
+    "test_pool": 9969589,
+    "orphaned_s1": 411977,
+    "sha256_ids": "1326723a047d49000dc98c5377aa12ed019f36fd0c2dcd06effbe162206d0406",
+    "shadow_s1_not_orphaned": 363049
+  },
+  "SHADOW-TEST-MATCHED": "shadow S1 not orphaned, orphaned competition, weights by (country, eligible-candidate bin) of test India/US",
+  "CHAIN-ORPHANED competition": {
+    "definition": "50% of NON-shadow chain S1 (name_core shared by >= 2 train S1) removed; their records stay as uncontested look-alike records for kept siblings",
+    "chain_member_s1": 1087123,
+    "orphaned_s1": 433847,
+    "shadow_chain_members": 219543,
+    "sha256_ids": "373238bd1b6268ee24b0550c1fa2cad3ec5e75a78a9e234f453067669cbf88ea"
+  },
+  "SHADOW-HARD": {
+    "s1": 406209,
+    "sha256_ids": "5cdae585a6ad4830a4fe6f355c6b69e1bf4ca87ce63471ce693c5a33de87ed8f",
+    "categories": {
+      "dense_pool(>=8 eligible candidates)": 24896,
+      "multiple_claimants(any candidate >=2)": 163422,
+      "record_address_empty(best candidate)": 3986,
+      "weak_name_strong_address(best)": 6513,
+      "strong_name_weak_address(best)": 204,
+      "collective_ambiguity(best peer sim<0.5, >=3 candidates)": 9571,
+      "low_margin(best-second<0.1, second>=0.5)": 363725,
+      "generic_name(S1 name_core shared by >=20 train S1)": 99476
+    }
+  },
+  "never_used_for": [
+    "stage-1 training",
+    "stage-2 training",
+    "transliteration learning",
+    "threshold selection",
+    "early stopping",
+    "model selection (from 2026-09-27 on)"
+  ],
+  "caveat": "E half B (which contains SHADOW-BASE) was used as an aggregate gate for EXP-B-07/B-06/S-01 decisions before this benchmark existed."
+}

@@ -111,6 +111,11 @@ def fit_s1_subset(cfg: dict, paths: Paths) -> list[str]:
     optionally a seeded sample. Validation S1s can never enter this list."""
     val = set(load_val_ids(paths))
     ids = [i for i in _ids(paths, "train", "source1").to_pylist() if i not in val]
+    only = cfg["fit"].get("only_countries")  # diagnostic (leave-one-country-out); default None = all countries
+    if only:
+        s1c = pq.read_table(paths.interim_file("train", "source1"), columns=["entity_id", "country"])
+        keep = {e for e, c in zip(s1c.column("entity_id").to_pylist(), s1c.column("country").to_pylist()) if country_key(c) in set(only)}
+        ids = [i for i in ids if i in keep]
     cap = cfg["fit"].get("max_train_s1")
     if cap and cap < len(ids):
         rng = np.random.default_rng(cfg["seed"] + 1)
@@ -521,8 +526,8 @@ def run_fit(cfg: dict, paths: Paths) -> dict:
         "solver": solver, "training_parts": str(out_dir),
     })
     if xlit_enabled(cfg):
-        fm = XlitMap.load(final_map_path(cfg, paths))
-        model.meta["xlit"] = {"params": fm.meta.get("params"), "final_map": str(final_map_path(cfg, paths)),
+        fm = ensure_final_map(cfg, paths)  # the fit-set map, or the pinned `xlit.map_path` (diagnostics)
+        model.meta["xlit"] = {"params": fm.meta.get("params"), "final_map": str(cfg["xlit"].get("map_path") or final_map_path(cfg, paths)),
                               "final_map_learned_from_digest": fm.meta["learned_from_digest"], "final_map_mappings": fm.meta["mappings"],
                               "training_features": "cross-fitted out-of-fold maps (fold 0 = inner tune, excluded from all maps)"}
     model.save(model_path(cfg, paths))
