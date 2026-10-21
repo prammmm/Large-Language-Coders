@@ -1,0 +1,13 @@
+inherit: baseline_v0.yaml
+
+experiment:
+  id: EXP-B-02
+
+blocking:
+  strip_leading_zeros: true
+  passes:
+    sorted_core:
+      enabled: true
+
+scoring:
+  tag: scored_EXP-B-02

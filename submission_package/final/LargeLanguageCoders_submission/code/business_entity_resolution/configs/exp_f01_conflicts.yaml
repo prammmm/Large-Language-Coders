@@ -1,0 +1,18 @@
+inherit: exp_m02b_lr_blocking_v1.yaml
+
+experiment:
+  id: EXP-F-01
+
+features:
+  extra: [num_conflict, legal_form_conflict]
+
+scoring:
+  tag: scored_EXP-F-01
+  eval_source_tag: null
+
+matcher:
+  features: [name_norm_eq, name_core_eq, name_core_jaccard, name_shared_tokens, name_ratio, name_token_set,
+             name_concat_jw, name_len_diff, addr_norm_eq, addr_jaccard, addr_ratio, addr_token_set,
+             addr_num_jaccard, addr_num_shared, addr_shared_useful, addr_any_empty, cheap_score, cheap_rank,
+             "name_core_jaccard*addr_num_jaccard", "name_ratio*addr_token_set",
+             num_conflict, legal_form_conflict]

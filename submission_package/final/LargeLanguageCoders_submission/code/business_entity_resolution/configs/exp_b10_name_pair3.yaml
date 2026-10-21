@@ -1,0 +1,19 @@
+inherit: exp_b09_name_num.yaml
+
+experiment:
+  id: EXP-B-10
+
+paths:
+  output_dir: artifacts/EXP-B-10/output
+
+blocking:
+  passes:
+    name_token:
+      max_tokens: 3
+
+matcher:
+  model_path: null
+
+scoring:
+  tag: scored_EXP-B-10
+  eval_source_tag: null

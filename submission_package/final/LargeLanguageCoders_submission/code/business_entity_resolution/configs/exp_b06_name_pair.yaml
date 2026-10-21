@@ -1,0 +1,21 @@
+inherit: exp_b07_name_x_addr.yaml
+
+experiment:
+  id: EXP-B-06
+
+paths:
+  output_dir: artifacts/EXP-B-06/output
+
+blocking:
+  passes:
+    name_token:
+      enabled: true
+      pair: true
+      max_tokens: 2
+      name_max_df: 1000000000
+      max_block_size: 50
+      weight: 1.0
+
+scoring:
+  tag: scored_EXP-B-06
+  eval_source_tag: null

@@ -1,0 +1,10 @@
+inherit: exp_f01_conflicts.yaml
+
+experiment:
+  id: EXP-F-01b
+
+features:
+  strip_leading_zeros: true
+
+scoring:
+  tag: scored_EXP-F-01b

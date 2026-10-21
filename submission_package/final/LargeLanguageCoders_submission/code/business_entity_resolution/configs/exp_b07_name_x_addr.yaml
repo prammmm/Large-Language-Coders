@@ -1,0 +1,20 @@
+inherit: exp_n03_legal_tokens.yaml
+
+experiment:
+  id: EXP-B-07
+
+paths:
+  output_dir: artifacts/EXP-B-07/output
+
+blocking:
+  passes:
+    exact_core:
+      enabled: true
+      with_addr_words: true
+      max_words: 30
+      max_block_size: 50
+      weight: 1.0
+
+scoring:
+  tag: scored_EXP-B-07
+  eval_source_tag: null

@@ -1,0 +1,4 @@
+primary: configs/exp_s03_veto_on_b09.yaml
+secondary: configs/exp_s04_veto_on_b10.yaml
+tertiary: configs/exp_b08_topk30.yaml
+output_dir: output

@@ -1,0 +1,272 @@
+{
+  "type": "lightgbm",
+  "features": [
+    "name_norm_eq",
+    "name_core_eq",
+    "name_core_jaccard",
+    "name_shared_tokens",
+    "name_ratio",
+    "name_token_set",
+    "name_concat_jw",
+    "name_len_diff",
+    "addr_norm_eq",
+    "addr_jaccard",
+    "addr_ratio",
+    "addr_token_set",
+    "addr_num_jaccard",
+    "addr_num_shared",
+    "addr_shared_useful",
+    "addr_any_empty",
+    "cheap_score",
+    "cheap_rank",
+    "name_core_jaccard*addr_num_jaccard",
+    "name_ratio*addr_token_set",
+    "num_conflict",
+    "legal_form_conflict",
+    "xlit_core_jaccard",
+    "xlit_token_set"
+  ],
+  "booster_file": "model.lgb.txt",
+  "params": {
+    "objective": "binary",
+    "learning_rate": 0.05,
+    "num_leaves": 31,
+    "max_depth": 8,
+    "min_data_in_leaf": 100,
+    "feature_fraction": 0.9,
+    "bagging_fraction": 0.8,
+    "bagging_freq": 1,
+    "lambda_l2": 1.0,
+    "num_threads": 8,
+    "seed": 42,
+    "deterministic": true,
+    "force_row_wise": true,
+    "verbosity": -1
+  },
+  "meta": {
+    "n_train_pairs": 4522583,
+    "positives": 530825,
+    "n_early_stopping_pairs": 1129322,
+    "num_boost_round_max": 1000,
+    "early_stopping_rounds": 50,
+    "best_iteration": 1000,
+    "fit_seconds": 136.11,
+    "params": {
+      "objective": "binary",
+      "learning_rate": 0.05,
+      "num_leaves": 31,
+      "max_depth": 8,
+      "min_data_in_leaf": 100,
+      "feature_fraction": 0.9,
+      "bagging_fraction": 0.8,
+      "bagging_freq": 1,
+      "lambda_l2": 1.0,
+      "num_threads": 8,
+      "seed": 42,
+      "deterministic": true,
+      "force_row_wise": true,
+      "verbosity": -1,
+      "metric": "binary_logloss"
+    },
+    "threshold": 0.68,
+    "inner_tune": {
+      "f05": 0.946834249615928,
+      "macro_precision": 0.9822464651931583,
+      "macro_recall": 0.8899825050836784,
+      "singleton_false_positive": 138,
+      "predicted_per_s1": 3.131150823446964
+    },
+    "fit_s1": 200000,
+    "inner_tune_s1": 39954,
+    "seed": 42,
+    "config": "configs\\exp_b08_topk30.yaml",
+    "blocking": {
+      "top_k": 30,
+      "encode_chunk_rows": 250000,
+      "max_raw_pairs_per_chunk": 4000000,
+      "strip_leading_zeros": true,
+      "passes": {
+        "exact_name": {
+          "enabled": true,
+          "max_block_size": 50,
+          "weight": 2.0
+        },
+        "addr_num_word": {
+          "enabled": true,
+          "max_block_size": 50,
+          "max_nums": 2,
+          "max_words": 4,
+          "word_max_df": 500000,
+          "weight": 1.0
+        },
+        "addr_rare_word": {
+          "enabled": true,
+          "max_df": 20,
+          "weight": 1.0
+        },
+        "name_token": {
+          "enabled": true,
+          "max_df": 200,
+          "weight": 1.0,
+          "pair": true,
+          "max_tokens": 2,
+          "name_max_df": 1000000000,
+          "max_block_size": 50
+        },
+        "exact_core": {
+          "enabled": true,
+          "max_block_size": 50,
+          "weight": 1.0,
+          "with_addr_words": true,
+          "max_words": 30
+        },
+        "sorted_core": {
+          "enabled": true,
+          "max_block_size": 50,
+          "weight": 2.0
+        },
+        "name_addr": {
+          "enabled": true,
+          "max_name_tokens": 2,
+          "max_words": 3,
+          "word_max_df": 500000,
+          "max_block_size": 50,
+          "weight": 1.0
+        },
+        "addr_pair": {
+          "enabled": true,
+          "max_words": 3,
+          "word_max_df": 500000,
+          "max_block_size": 50,
+          "weight": 1.0
+        }
+      },
+      "name_view": "name_xlit"
+    },
+    "features_options": {
+      "strip_leading_zeros": true,
+      "extra": [
+        "num_conflict",
+        "legal_form_conflict",
+        "xlit_core_jaccard",
+        "xlit_token_set"
+      ]
+    },
+    "solver": "LightGBM gbdt, binary logloss; early stopping + threshold on the inner train-fold split",
+    "training_parts": "data\\processed\\train\\scored_EXP-B-08_fit",
+    "xlit": {
+      "params": {
+        "legal_tokens": {
+          "enabled": true,
+          "max_content_confidence": 0.5,
+          "min_confidence": 0.8,
+          "min_support": 20
+        },
+        "min_confidence": 0.5,
+        "min_support": 3
+      },
+      "final_map": "experiments\\runs\\EXP-B-08\\xlit_map.json",
+      "final_map_learned_from_digest": "947ddcb6520c7762742941071eb76e1b4ba769ef14dd9b39606d9ee4c9282b44",
+      "final_map_mappings": 1262,
+      "training_features": "cross-fitted out-of-fold maps (fold 0 = inner tune, excluded from all maps)"
+    },
+    "feature_importance": {
+      "name_norm_eq": {
+        "gain_share": 0.004120636403026618,
+        "splits": 210
+      },
+      "name_core_eq": {
+        "gain_share": 0.0008846245442167574,
+        "splits": 65
+      },
+      "name_core_jaccard": {
+        "gain_share": 0.005396292474893082,
+        "splits": 942
+      },
+      "name_shared_tokens": {
+        "gain_share": 0.0010315812187304395,
+        "splits": 508
+      },
+      "name_ratio": {
+        "gain_share": 0.005573010407637099,
+        "splits": 1876
+      },
+      "name_token_set": {
+        "gain_share": 0.008505161755069584,
+        "splits": 2479
+      },
+      "name_concat_jw": {
+        "gain_share": 0.008366150841990324,
+        "splits": 2187
+      },
+      "name_len_diff": {
+        "gain_share": 0.01517644499684058,
+        "splits": 2885
+      },
+      "addr_norm_eq": {
+        "gain_share": 1.4546349769950429e-05,
+        "splits": 11
+      },
+      "addr_jaccard": {
+        "gain_share": 0.0045101806932542265,
+        "splits": 1871
+      },
+      "addr_ratio": {
+        "gain_share": 0.01439473918220802,
+        "splits": 1582
+      },
+      "addr_token_set": {
+        "gain_share": 0.022348696622981036,
+        "splits": 2155
+      },
+      "addr_num_jaccard": {
+        "gain_share": 0.02531004668469833,
+        "splits": 1213
+      },
+      "addr_num_shared": {
+        "gain_share": 0.002806788868971556,
+        "splits": 434
+      },
+      "addr_shared_useful": {
+        "gain_share": 0.004658513851226034,
+        "splits": 1375
+      },
+      "addr_any_empty": {
+        "gain_share": 0.0,
+        "splits": 0
+      },
+      "cheap_score": {
+        "gain_share": 0.23378943593937165,
+        "splits": 2986
+      },
+      "cheap_rank": {
+        "gain_share": 0.0659882298089723,
+        "splits": 1022
+      },
+      "name_core_jaccard*addr_num_jaccard": {
+        "gain_share": 0.11400761027563136,
+        "splits": 679
+      },
+      "name_ratio*addr_token_set": {
+        "gain_share": 0.3572170954860661,
+        "splits": 1397
+      },
+      "num_conflict": {
+        "gain_share": 0.058943582784650485,
+        "splits": 459
+      },
+      "legal_form_conflict": {
+        "gain_share": 0.00767978628304444,
+        "splits": 333
+      },
+      "xlit_core_jaccard": {
+        "gain_share": 0.014570230528931092,
+        "splits": 1183
+      },
+      "xlit_token_set": {
+        "gain_share": 0.024706613997818927,
+        "splits": 2148
+      }
+    }
+  }
+}

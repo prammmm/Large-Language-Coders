@@ -1,0 +1,14 @@
+inherit: exp_b10_name_pair3.yaml
+
+experiment:
+  id: EXP-S-04
+
+paths:
+  output_dir: artifacts/EXP-S-04/output_stage1
+
+matcher:
+  model_path: null
+
+scoring:
+  tag: scored_EXP-S-04
+  eval_source_tag: null

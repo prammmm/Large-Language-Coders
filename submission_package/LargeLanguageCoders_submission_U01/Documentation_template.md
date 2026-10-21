@@ -1,7 +1,7 @@
 # ML Challenge 2026: Business Entity Resolution Solution Template
 
 **Team Name:** LargeLanguageCoders
-**Team Members:** Ayush (technical lead), Param Bapu
+**Team Members:** Ayush Singh, Atharva Patil, Kshitij Kediya, Param Bapu  
 **Submission Date:** 2026-09-27
 
 ---

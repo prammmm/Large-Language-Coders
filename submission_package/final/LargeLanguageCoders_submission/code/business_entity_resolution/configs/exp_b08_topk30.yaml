@@ -1,0 +1,20 @@
+inherit: exp_b06_name_pair.yaml
+
+experiment:
+  id: EXP-B-08
+
+paths:
+  output_dir: artifacts/EXP-B-08/output
+
+blocking:
+  top_k: 30
+
+matcher:
+  model_path: null
+
+scoring:
+  tag: scored_EXP-B-08
+  eval_source_tag: null
+
+tuning:
+  recall_at_k: [1, 3, 5, 10, 20, 30]

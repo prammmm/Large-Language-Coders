@@ -1,0 +1,65 @@
+inherit: exp_b04_blocking_v2.yaml
+
+experiment:
+  id: EXP-N-02
+
+paths:
+  output_dir: artifacts/EXP-N-02/output
+
+xlit:
+  enabled: true
+  min_support: 3
+  min_confidence: 0.5
+  folds: 5
+
+blocking:
+  name_view: name_xlit
+
+features:
+  strip_leading_zeros: true
+  extra: [num_conflict, legal_form_conflict, xlit_core_jaccard, xlit_token_set]
+
+matcher:
+  type: lightgbm
+  model_path: null
+  features:
+    - name_norm_eq
+    - name_core_eq
+    - name_core_jaccard
+    - name_shared_tokens
+    - name_ratio
+    - name_token_set
+    - name_concat_jw
+    - name_len_diff
+    - addr_norm_eq
+    - addr_jaccard
+    - addr_ratio
+    - addr_token_set
+    - addr_num_jaccard
+    - addr_num_shared
+    - addr_shared_useful
+    - addr_any_empty
+    - cheap_score
+    - cheap_rank
+    - name_core_jaccard*addr_num_jaccard
+    - name_ratio*addr_token_set
+    - num_conflict
+    - legal_form_conflict
+    - xlit_core_jaccard
+    - xlit_token_set
+
+scoring:
+  tag: scored_EXP-N-02
+  eval_source_tag: null
+
+fit:
+  max_train_s1: 200000
+  reuse_fit_parts: null
+  dev_subsample_s1: null
+
+decision:
+  threshold_from: model
+  competition:
+    enabled: true
+    rule: best_claimant
+    margin: 0.0

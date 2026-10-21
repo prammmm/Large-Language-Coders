@@ -1,0 +1,34 @@
+inherit: exp_m03_lgbm.yaml
+
+experiment:
+  id: EXP-B-04
+
+blocking:
+  top_k: 20
+  passes:
+    name_addr:
+      enabled: true
+      max_name_tokens: 2
+      max_words: 3
+      word_max_df: 500000
+      max_block_size: 50
+      weight: 1.0
+    addr_pair:
+      enabled: true
+      max_words: 3
+      word_max_df: 500000
+      max_block_size: 50
+      weight: 1.0
+
+scoring:
+  tag: scored_EXP-B-04
+  eval_source_tag: null
+
+matcher:
+  type: lightgbm
+  model_path: null
+
+fit:
+  max_train_s1: 200000
+  reuse_fit_parts: null
+  dev_subsample_s1: null

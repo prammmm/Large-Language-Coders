@@ -1,0 +1,18 @@
+inherit: exp_n02_transliteration.yaml
+
+experiment:
+  id: EXP-N-03
+
+paths:
+  output_dir: artifacts/EXP-N-03/output
+
+xlit:
+  legal_tokens:
+    enabled: true
+    min_support: 20
+    min_confidence: 0.8
+    max_content_confidence: 0.5
+
+scoring:
+  tag: scored_EXP-N-03
+  eval_source_tag: null
